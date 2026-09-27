@@ -79,6 +79,9 @@ export default function App() {
   // Admin Master Password Lock state
   const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
 
+  // Projector Teacher/Host Password Lock state (Requires USTOZ2026)
+  const [isProjectorUnlocked, setIsProjectorUnlocked] = useState(false);
+
   // Player Profile state
   const [playerNickname, setPlayerNickname] = useState('CyberSardor');
   const [playerAvatarUrl, setPlayerAvatarUrl] = useState<string>('https://images.unsplash.com/photo-1635863138275-d9b33299680b?auto=format&fit=crop&w=256&q=80');
@@ -263,6 +266,7 @@ export default function App() {
         return next;
       });
       showToast(`"${found.title}" o'yini boshlandi! Proyektorga o'tilmoqda 🚀`);
+      setIsProjectorUnlocked(true);
       setCurrentScreen('proyektor-ekran');
     }
   };
@@ -283,6 +287,24 @@ export default function App() {
   const handleLockAdmin = () => {
     setIsAdminUnlocked(false);
     showToast("Admin paneli qulflandi 🔒");
+  };
+
+  // Projector Master Password Unlock (Strictly USTOZ2026, never leak in logs or toasts)
+  const handleUnlockProjector = (password: string): boolean => {
+    const input = password.trim();
+    if (input.toUpperCase() === 'USTOZ2026') {
+      setIsProjectorUnlocked(true);
+      showToast("Katta Proyektor muvaffaqiyatli ochildi! Xush kelibsiz, Ustoz 📺");
+      return true;
+    }
+    playWrongSound();
+    showToast("Ustoz paroli noto'g'ri! Kirish rad etildi ❌");
+    return false;
+  };
+
+  const handleLockProjector = () => {
+    setIsProjectorUnlocked(false);
+    showToast("Katta Proyektor qulflandi 🔒");
   };
 
   // Footer neon button: "O'yinchi (PIN terish)" action
@@ -307,7 +329,9 @@ export default function App() {
         playerNickname={playerNickname}
         playerAvatarUrl={playerAvatarUrl}
         isAdminUnlocked={isAdminUnlocked}
+        isProjectorUnlocked={isProjectorUnlocked}
         onLockAdmin={handleLockAdmin}
+        onLockProjector={handleLockProjector}
       />
 
       {/* Main Content Area */}
@@ -342,6 +366,10 @@ export default function App() {
             onKickPlayer={handleKickLeaderboardPlayer}
             activePlayersCount={activePlayers.length}
             serverPing={serverPing}
+            isUnlocked={isProjectorUnlocked}
+            onUnlock={handleUnlockProjector}
+            onLock={handleLockProjector}
+            onNavigateToPlayer={() => setCurrentScreen('oyinchi-pulti')}
           />
         )}
 
@@ -378,6 +406,8 @@ export default function App() {
         currentScreen={currentScreen}
         onScreenChange={setCurrentScreen}
         onNavigateToPinEntry={handleNavigateToPinEntry}
+        isProjectorUnlocked={isProjectorUnlocked}
+        isAdminUnlocked={isAdminUnlocked}
       />
 
       {/* Dynamic Toast Feedback */}

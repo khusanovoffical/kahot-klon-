@@ -10,7 +10,9 @@ interface HeaderProps {
   playerNickname?: string;
   playerAvatarUrl?: string;
   isAdminUnlocked?: boolean;
+  isProjectorUnlocked?: boolean;
   onLockAdmin?: () => void;
+  onLockProjector?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -21,7 +23,9 @@ export const Header: React.FC<HeaderProps> = ({
   playerNickname = 'Player_01',
   playerAvatarUrl,
   isAdminUnlocked,
-  onLockAdmin
+  isProjectorUnlocked,
+  onLockAdmin,
+  onLockProjector
 }) => {
   const [muted, setLocalMuted] = React.useState(getMuted());
 
@@ -95,14 +99,17 @@ export const Header: React.FC<HeaderProps> = ({
                 playClickSound();
                 onScreenChange('proyektor-ekran');
               }}
-              className={`px-3 sm:px-4 py-1.5 rounded-md font-space text-xs sm:text-sm font-bold transition-all ${
+              className={`px-3 sm:px-4 py-1.5 rounded-md font-space text-xs sm:text-sm font-bold transition-all flex items-center gap-1 ${
                 currentScreen === 'proyektor-ekran'
                   ? 'bg-[#2563eb] text-[#eeefff] shadow-[2px_2px_0px_#000000]'
                   : 'text-[#c3c6d7] hover:text-[#dce1ff] hover:bg-[#181e36]'
               }`}
               type="button"
             >
-              Proyektor Ekran
+              <span className="material-symbols-outlined text-[16px]">
+                {isProjectorUnlocked ? 'smart_display' : 'lock'}
+              </span>
+              <span>Proyektor Ekran</span>
             </button>
 
             <button

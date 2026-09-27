@@ -6,12 +6,16 @@ interface FooterProps {
   currentScreen?: ScreenMode;
   onScreenChange?: (screen: ScreenMode) => void;
   onNavigateToPinEntry?: () => void;
+  isProjectorUnlocked?: boolean;
+  isAdminUnlocked?: boolean;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   currentScreen,
   onScreenChange,
-  onNavigateToPinEntry
+  onNavigateToPinEntry,
+  isProjectorUnlocked = false,
+  isAdminUnlocked = false
 }) => {
   const handleGoToPlayerPin = () => {
     playClickSound();
@@ -63,9 +67,9 @@ export const Footer: React.FC<FooterProps> = ({
                   ? 'bg-[#2563eb] text-white border-2 border-black shadow-[2px_2px_0px_#000000]'
                   : 'text-[#c3c6d7] hover:text-[#5de6ff]'
               }`}
-              title="Auditoriya va Katta Ekran Proyektor ko'rinishi"
+              title="Auditoriya va Katta Ekran Proyektor ko'rinishi (Ustoz paroli talab etiladi)"
             >
-              <span>📺 Katta Proyektor</span>
+              <span>{isProjectorUnlocked ? '📺' : '🔒'} Katta Proyektor</span>
             </button>
 
             <span className="text-zinc-600 hidden sm:inline">|</span>
@@ -84,7 +88,7 @@ export const Footer: React.FC<FooterProps> = ({
               }`}
               title="Superadmin boshqaruv paneli"
             >
-              <span>🔒 Admin Boshqaruv</span>
+              <span>{isAdminUnlocked ? '🔓' : '🔒'} Admin Boshqaruv</span>
             </button>
           </div>
         )}

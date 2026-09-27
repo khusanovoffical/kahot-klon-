@@ -5,6 +5,7 @@ import {
   playClickSound,
   playTickSound,
   playCorrectSound,
+  playWrongSound,
   toggleBgm,
   getIsBgmPlaying
 } from '../utils/sound';
@@ -20,6 +21,10 @@ interface ProjectorViewProps {
   onKickPlayer?: (playerId: string, name: string) => void;
   activePlayersCount?: number;
   serverPing?: number;
+  isUnlocked?: boolean;
+  onUnlock?: (password: string) => boolean;
+  onLock?: () => void;
+  onNavigateToPlayer?: () => void;
 }
 
 export const ProjectorView: React.FC<ProjectorViewProps> = ({
@@ -32,8 +37,15 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
   roomPin = '749 201',
   onKickPlayer,
   activePlayersCount,
-  serverPing = 14
+  serverPing = 14,
+  isUnlocked = false,
+  onUnlock,
+  onLock,
+  onNavigateToPlayer
 }) => {
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+
   const currentQ = questions[currentQuestionIndex] || questions[0];
   const actualOnline = activePlayersCount !== undefined ? activePlayersCount : leaderboard.length;
 
@@ -45,6 +57,120 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [showCenterQrCard, setShowCenterQrCard] = useState(true);
   const totalCircumference = 301.6;
+
+  // Master password submit handler for Projector
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordInput.trim()) {
+      setPasswordError(true);
+      return;
+    }
+    if (onUnlock) {
+      const ok = onUnlock(passwordInput.trim());
+      if (ok) {
+        playCorrectSound();
+        setPasswordError(false);
+        setPasswordInput('');
+        onNotify("Ustoz paroli tasdiqlandi! Katta Proyektor ochildi 📺");
+      } else {
+        playWrongSound();
+        setPasswordError(true);
+        onNotify("Xato parol! Kirish rad etildi ❌");
+      }
+    }
+  };
+
+  // If Projector is LOCKED, render Master Gate
+  if (!isUnlocked) {
+    return (
+      <div className="w-full min-h-[550px] flex items-center justify-center p-4">
+        <div className="w-full max-w-[500px] bg-[#181e36] border-4 border-black shadow-[8px_8px_0px_#000000] rounded-2xl p-6 sm:p-8 flex flex-col gap-6 text-center relative overflow-hidden">
+          {/* Ambient Glow */}
+          <div className="absolute -top-12 -left-12 w-48 h-48 bg-[#2563eb]/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-[#5de6ff]/15 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-20 h-20 rounded-2xl bg-[#2563eb] text-white border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_#000000]">
+              <span className="material-symbols-outlined text-[44px]">smart_display</span>
+            </div>
+
+            <div>
+              <span className="font-space text-xs font-bold text-[#5de6ff] uppercase tracking-widest">
+                KATTA PROYEKTOR XAVFSIZLIGI
+              </span>
+              <h2 className="font-space text-2xl sm:text-3xl font-bold text-[#dce1ff] mt-1">
+                USTOZ VA BOSHQARUVCHI
+              </h2>
+            </div>
+
+            <p className="text-xs sm:text-sm text-[#c3c6d7]">
+              Katta proyektor (auditoriya) ekraniga o'tish uchun maxfiy parolni kiriting. Parolsiz ekran to'liq himoyalangan.
+            </p>
+          </div>
+
+          <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1 text-left">
+              <label className="font-space text-xs font-bold uppercase text-[#dce1ff] flex items-center justify-between">
+                <span>Ustoz Paroli (Host Key):</span>
+                <span className="text-[11px] text-[#5de6ff] bg-[#0c2444] px-2 py-0.5 rounded font-mono font-bold border border-black">
+                  🔒 Himoyalangan
+                </span>
+              </label>
+
+              <div className="relative">
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={e => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError(false);
+                  }}
+                  placeholder="Maxfiy parolni kiriting..."
+                  autoFocus
+                  className={`w-full p-3 pl-10 bg-[#060d24] text-[#5de6ff] font-space text-lg font-bold rounded-xl border-4 ${
+                    passwordError ? 'border-[#ffb4ab] animate-shake' : 'border-black'
+                  } shadow-[4px_4px_0px_#000000] focus:outline-none focus:border-[#5de6ff]`}
+                />
+                <span className="material-symbols-outlined text-[20px] text-[#5de6ff] absolute left-3 top-3.5">
+                  key
+                </span>
+              </div>
+
+              {passwordError && (
+                <div className="text-xs text-[#ffb4ab] font-space font-bold mt-1.5 flex items-center gap-1.5 bg-[#93000a]/30 p-2 rounded-lg border border-[#ffb4ab]/40 animate-shake">
+                  <span className="material-symbols-outlined text-[16px] text-[#ffb4ab]">error</span>
+                  <span>Xato parol! Kirish rad etildi. Qayta urinib ko'ring.</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 px-6 bg-[#2563eb] text-white font-space text-lg font-bold uppercase rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
+            >
+              <span>Proyektorni Ochish (Unlock)</span>
+              <span className="material-symbols-outlined text-[20px]">lock_open</span>
+            </button>
+          </form>
+
+          {onNavigateToPlayer && (
+            <button
+              type="button"
+              onClick={onNavigateToPlayer}
+              className="text-xs text-[#c3c6d7] hover:text-[#5de6ff] font-space underline transition-colors"
+            >
+              ← O'yinchilar pultiga qaytish
+            </button>
+          )}
+
+          <div className="pt-2 border-t-2 border-black/40 flex items-center justify-between text-xs text-[#c3c6d7] font-space">
+            <span>Katta Ekran / Auditoriya</span>
+            <span className="text-[#5de6ff]">Ustoz Rejimi</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Synchronize submission count if online count drops
   useEffect(() => {
@@ -242,6 +368,18 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
             <span>Keyingi savol</span>
             <span className="material-symbols-outlined text-[18px]">fast_forward</span>
           </button>
+
+          {onLock && (
+            <button
+              type="button"
+              onClick={onLock}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#93000a] text-[#ffdad6] hover:bg-[#b00020] rounded font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000] transition-colors"
+              title="Katta Proyektorni qulflash (Ustoz paroli talab etiladi)"
+            >
+              <span className="material-symbols-outlined text-[18px]">lock</span>
+              <span className="hidden md:inline">Qulflash</span>
+            </button>
+          )}
         </div>
       </div>
 
