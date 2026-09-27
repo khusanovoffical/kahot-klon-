@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-space-grotesk: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  
+  html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #0b1229;
+    color: #dce1ff;
+    font-family: var(--font-inter);
+    overscroll-behavior: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #060d24;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #222941;
+    border-radius: 4px;
+    border: 1px solid #000000;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #5de6ff;
+  }
+}
+
+.font-space {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.font-inter {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Hard Neo-Brutalist mechanical offset shadows */
+.brutal-border-2 {
+  border: 2px solid #000000;
+}
+
+.brutal-border-4 {
+  border: 4px solid #000000;
+}
+
+.brutal-shadow-sm {
+  box-shadow: 2px 2px 0px #000000;
+}
+
+.brutal-shadow {
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.brutal-shadow-lg {
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.brutal-shadow-xl {
+  box-shadow: 8px 8px 0px #000000;
+}
+
+.brutal-shadow-cyan {
+  box-shadow: 4px 4px 0px #5de6ff;
+}
+
+.brutal-shadow-yellow {
+  box-shadow: 4px 4px 0px #eec200;
+}
+
+/* Interactive click translations */
+.brutal-btn {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.brutal-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.brutal-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px #000000;
+}
+
+/* Background Cyber Grid */
+.bg-cyber-dots {
+  background-image: radial-gradient(#2563eb 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Pulse Glow Keyframes */
+@keyframes urgent-pulse {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.85);
+  }
+}
+
+.panic-pulse {
+  animation: urgent-pulse 0.7s infinite alternate;
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(-80px) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-130px) scale(0.9);
+  }
+}
+
+.animate-reaction-float {
+  animation: float-up 3s ease-out forwards;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "HUMOYUN QUIZ ⚡ — Jonli Intellektual Jang Maydoni",
+  "description": "Jonli sinxronizatsiyali, kiber-arkada uslubidagi interaktiv multiplayer viktorina ilovasi: O'yinchi pulti, Proyektor ekran va Superadmin boshqaruvi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
