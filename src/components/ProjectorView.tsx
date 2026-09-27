@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Question, LeaderboardPlayer, FloatingReaction } from '../types/quiz';
+import { QRCodeDisplay } from './QRCodeDisplay';
 import {
   playClickSound,
   playTickSound,
@@ -36,6 +37,8 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [isMusicOn, setIsMusicOn] = useState(getIsBgmPlaying());
   const [submissionCount, setSubmissionCount] = useState(38);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [showCenterQrCard, setShowCenterQrCard] = useState(true);
   const totalCircumference = 301.6;
 
   // Countdown timer loop
@@ -167,6 +170,18 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
 
         {/* Right: Stage Master Controls */}
         <div className="flex items-center gap-2">
+          {!showCenterQrCard && (
+            <button
+              type="button"
+              onClick={() => setShowCenterQrCard(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#eec200] text-[#3c2f00] rounded font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000] transition-colors hover:bg-yellow-400"
+              title="Katta QR-kodni ko'rsatish"
+            >
+              <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
+              <span>QR Kodni Ko'rsatish</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleMusicToggle}
@@ -204,6 +219,79 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Requirement 4: Center QR Component & Direct Join & Room PIN */}
+      {showCenterQrCard && (
+        <div className="w-full bg-[#181e36] rounded-xl p-5 border-4 border-black shadow-[6px_6px_0px_#000000] mb-6 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+          <div className="absolute -left-12 -bottom-12 w-48 h-48 bg-[#5de6ff]/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -right-12 -top-12 w-48 h-48 bg-[#eec200]/10 rounded-full blur-2xl pointer-events-none" />
+
+          {/* Left instructions */}
+          <div className="flex flex-col items-center md:items-start text-center md:text-left gap-2 max-w-md z-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#2563eb] text-[#eeefff] rounded-full text-xs font-space font-bold uppercase tracking-wider border border-black shadow-sm">
+              <span className="material-symbols-outlined text-[16px]">qr_code_scanner</span>
+              <span>Proyektor Skanerlash Markazi</span>
+            </div>
+            <h2 className="font-space text-2xl sm:text-3xl font-bold text-[#dce1ff]">
+              O'yinga Darhol Qo'shiling!
+            </h2>
+            <p className="text-sm text-[#c3c6d7]">
+              Smartfoningiz kamerasini QR-kodga qarating yoki to'g'ridan-to'g'ri link orqali 6 xonali PIN kodni kiriting.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 mt-1">
+              <button
+                type="button"
+                onClick={() => setIsQrModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#222941] hover:bg-[#2d344c] text-[#5de6ff] rounded-lg font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000] transition-transform active:translate-y-0.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">fullscreen</span>
+                <span>To'liq Ekran QR</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCenterQrCard(false)}
+                className="text-xs text-[#c3c6d7] hover:text-white underline font-space py-1 px-2"
+              >
+                Yashirish ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Center/Right: Big Scannable QR and Big PIN Code */}
+          <div className="flex flex-col sm:flex-row items-center gap-6 bg-[#0e1428] p-4 rounded-xl border-2 border-black shadow-inner z-10">
+            {/* Scannable QR Code */}
+            <div className="shrink-0 bg-white p-2 rounded-lg border-2 border-black shadow">
+              <QRCodeDisplay roomPin={roomPin} size={140} />
+            </div>
+
+            {/* Direct Link and 6-digit BIG PIN code */}
+            <div className="flex flex-col items-center sm:items-start gap-2.5">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-space font-bold uppercase tracking-wider text-[#c3c6d7]">
+                  To'g'ridan-to'g'ri havola:
+                </span>
+                <span className="font-mono text-sm text-[#5de6ff] font-bold select-all bg-[#181e36] px-2 py-0.5 rounded border border-black/60">
+                  humoyunquiz.uz/join
+                </span>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[11px] font-space font-bold uppercase tracking-wider text-[#eec200]">
+                  6 Xonali Katta O'yin PIN Kodi:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyPin}
+                  className="font-space text-3xl sm:text-4xl font-black text-[#eec200] tracking-widest select-all bg-[#141a32] px-4 py-1.5 rounded-lg border-2 border-[#eec200] shadow-[3px_3px_0px_#000000] hover:scale-105 active:scale-95 transition-transform"
+                  title="Nusxalash uchun bosing"
+                >
+                  {roomPin}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Question Index & Category Overline Bar */}
       <div className="w-full flex items-center justify-between pb-2 px-1">
@@ -549,6 +637,58 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Fullscreen Theater QR Modal */}
+      {isQrModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#060d24]/95 backdrop-blur-xl flex items-center justify-center p-4">
+          <div className="relative max-w-xl w-full bg-[#181e36] rounded-2xl p-8 border-4 border-black shadow-[10px_10px_0px_#000000] flex flex-col items-center text-center">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(false)}
+              className="absolute top-4 right-4 w-10 h-10 rounded-lg bg-[#222941] text-[#c3c6d7] hover:text-white hover:bg-[#93000a] flex items-center justify-center border-2 border-black font-bold text-lg transition-colors"
+            >
+              ✕
+            </button>
+
+            <span className="px-4 py-1 rounded-full bg-[#eec200] text-[#3c2f00] font-space text-xs font-bold uppercase tracking-widest border border-black mb-4">
+              PROYEKTOR & AUDITORIYA REJIMI
+            </span>
+
+            <h2 className="font-space text-3xl sm:text-4xl font-black text-white mb-2">
+              Kamerani Qarating & O'yinga Kiring!
+            </h2>
+            <p className="text-sm text-[#c3c6d7] mb-6 max-w-md">
+              Katta zaldagi barcha ishtirokchilar uchun yuqori aniqlikdagi skanerlash QR-kodi
+            </p>
+
+            {/* Giant QR Canvas */}
+            <div className="p-4 bg-white rounded-2xl border-4 border-black shadow-[6px_6px_0px_#000000] mb-6">
+              <QRCodeDisplay roomPin={roomPin} size={280} />
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4 w-full justify-center">
+              <div className="flex flex-col items-center sm:items-start bg-[#0e1428] px-5 py-3 rounded-xl border-2 border-black">
+                <span className="text-xs text-[#c3c6d7] font-space uppercase">To'g'ridan-to'g'ri Link:</span>
+                <span className="font-space font-bold text-[#5de6ff] text-base">humoyunquiz.uz/join</span>
+              </div>
+
+              <div className="flex flex-col items-center sm:items-start bg-[#0e1428] px-5 py-3 rounded-xl border-2 border-[#eec200]">
+                <span className="text-xs text-[#c3c6d7] font-space uppercase">Xona PIN Kodi:</span>
+                <span className="font-space font-black text-[#eec200] text-3xl tracking-widest">{roomPin}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsQrModalOpen(false)}
+              className="mt-6 px-6 py-2.5 bg-[#2563eb] text-white rounded-xl font-space font-bold border-2 border-black shadow-[3px_3px_0px_#000000] hover:bg-blue-600 transition-colors"
+            >
+              Savollarga Qaytish
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

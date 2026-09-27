@@ -29,6 +29,13 @@ export default function App() {
   const [roomPin, setRoomPin] = useState('749 201');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Admin Master Password Lock state (Requirement 2)
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+
+  // Player Profile state
+  const [playerNickname, setPlayerNickname] = useState('CyberSardor');
+  const [playerAvatarUrl, setPlayerAvatarUrl] = useState<string>('https://images.unsplash.com/photo-1635863138275-d9b33299680b?auto=format&fit=crop&w=256&q=80');
+
   // Modals state
   const [isKickModalOpen, setIsKickModalOpen] = useState(false);
   const [isGhostAdminOpen, setIsGhostAdminOpen] = useState(false);
@@ -59,12 +66,12 @@ export default function App() {
   useEffect(() => {
     const reactionInterval = setInterval(() => {
       const presets = [
-        { emoji: '🔥', label: '+1 Sardor_Dev' },
-        { emoji: '⚡️', label: 'Malika_AI' },
-        { emoji: '🚀', label: 'Tezkor!' },
-        { emoji: '❤️', label: 'Jasur' },
+        { emoji: '🔥', label: '+1 Sardor (Iron Man)' },
+        { emoji: '⚡️', label: 'Malika (Spider-Man)' },
+        { emoji: '🚀', label: 'Jasur (Batman)' },
+        { emoji: '❤️', label: 'Anvar (Thor)' },
         { emoji: '👏', label: 'Bravo!' },
-        { emoji: '😂', label: 'Anvar' }
+        { emoji: '👑', label: 'Top 1 Peshqadam' }
       ];
       const randomPreset = presets[Math.floor(Math.random() * presets.length)];
       const newReaction: FloatingReaction = {
@@ -76,7 +83,7 @@ export default function App() {
       };
 
       setFloatingReactions(prev => [...prev.slice(-6), newReaction]);
-    }, 4500);
+    }, 5000);
 
     return () => clearInterval(reactionInterval);
   }, []);
@@ -86,7 +93,7 @@ export default function App() {
     const newReaction: FloatingReaction = {
       id: `react-${Date.now()}`,
       emoji,
-      label: `Player_01: ${label}`,
+      label: `${playerNickname}: ${label}`,
       x: Math.floor(Math.random() * 60) + 20,
       y: 70
     };
@@ -98,18 +105,42 @@ export default function App() {
     setCurrentQuestionIndex(prev => (prev + 1) % questions.length);
   };
 
-  // Save question from AdminView
-  const handleSaveQuestion = (updated: Question) => {
-    setQuestions(prev =>
-      prev.map((q, idx) => (idx === currentQuestionIndex ? updated : q))
-    );
+  // Save specific question by index from AdminView
+  const handleSaveQuestionByIndex = (index: number, updated: Question) => {
+    setQuestions(prev => prev.map((q, idx) => (idx === index ? updated : q)));
+    showToast(`Savol #${index + 1} muvaffaqiyatli saqlandi! 💾`);
   };
 
-  // Kick player from Leaderboard
+  // Add new question
+  const handleAddQuestion = (newQuestion: Question) => {
+    setQuestions(prev => [...prev, newQuestion]);
+    setCurrentQuestionIndex(questions.length);
+    showToast(`Yangi savol muvaffaqiyatli qo'shildi! (Jami: ${questions.length + 1} ta) ✨`);
+  };
+
+  // Delete question
+  const handleDeleteQuestion = (index: number) => {
+    if (questions.length <= 1) {
+      showToast("Xatolik: kamida 1 ta savol qolishi shart! ⚠️");
+      return;
+    }
+    setQuestions(prev => prev.filter((_, idx) => idx !== index));
+    setCurrentQuestionIndex(0);
+    showToast(`Savol #${index + 1} o'chirildi 🗑️`);
+  };
+
+  // Bulk update (from AI Generator)
+  const handleBulkUpdateQuestions = (newQuestions: Question[]) => {
+    setQuestions(newQuestions);
+    setCurrentQuestionIndex(0);
+    showToast(`${newQuestions.length} ta savol muvaffaqiyatli yuklandi! ⚡`);
+  };
+
+  // Kick player from Leaderboard / Lobby
   const handleKickLeaderboardPlayer = (playerId: string, name: string) => {
     playWrongSound();
     setLeaderboard(prev => prev.filter(p => p.id !== playerId));
-    showToast(`${name} lobbiyadan chiqarildi (Kick) 🚫`);
+    showToast(`${name} zaldan chiqarib yuborildi (KICK) 🚫`);
   };
 
   // Start specific quiz from catalog
@@ -122,16 +153,39 @@ export default function App() {
     }
   };
 
+  // Master Password Unlock (Requirement 2)
+  const handleUnlockAdmin = (password: string): boolean => {
+    // Secret master passwords allowed
+    const validKeys = ['admin777', 'superadmin', 'admin', 'humoyun2026'];
+    if (validKeys.includes(password.trim().toLowerCase())) {
+      setIsAdminUnlocked(true);
+      showToast("God-Mode muvaffaqiyatli faollashtirildi! Xush kelibsiz, Superadmin 🛡️");
+      return true;
+    }
+    playWrongSound();
+    showToast("Maxfiy kalit noto'g'ri! Kirish rad etildi ❌");
+    return false;
+  };
+
+  const handleLockAdmin = () => {
+    setIsAdminUnlocked(false);
+    showToast("Admin paneli qulflandi 🔒");
+  };
+
   return (
     <div className="bg-[#0b1229] font-['Inter',sans-serif] text-[#dce1ff] min-h-screen relative selection:bg-[#5de6ff] selection:text-[#00363e]">
       {/* Background Cyber Grid */}
       <div className="fixed inset-0 pointer-events-none z-0 bg-cyber-dots opacity-20" />
 
-      {/* Top Header */}
+      {/* Top Header with strict player isolation */}
       <Header
         currentScreen={currentScreen}
         onScreenChange={setCurrentScreen}
         onlinePlayersCount={1280}
+        playerNickname={playerNickname}
+        playerAvatarUrl={playerAvatarUrl}
+        isAdminUnlocked={isAdminUnlocked}
+        onLockAdmin={handleLockAdmin}
       />
 
       {/* Main Content Area */}
@@ -141,6 +195,11 @@ export default function App() {
             onSendReaction={handleSendReaction}
             onNotify={showToast}
             roomPin={roomPin}
+            activeQuestion={questions[currentQuestionIndex] || questions[0]}
+            onPlayerProfileUpdate={(name, avatar) => {
+              setPlayerNickname(name);
+              setPlayerAvatarUrl(avatar);
+            }}
           />
         )}
 
@@ -160,18 +219,32 @@ export default function App() {
         {currentScreen === 'admin-boshqaruv' && (
           <AdminView
             quizCatalog={quizCatalog}
-            currentQuestion={questions[currentQuestionIndex] || questions[0]}
-            onSaveQuestion={handleSaveQuestion}
+            questions={questions}
+            currentQuestionIndex={currentQuestionIndex}
+            onSelectQuestion={setCurrentQuestionIndex}
+            onSaveQuestion={handleSaveQuestionByIndex}
+            onAddQuestion={handleAddQuestion}
+            onDeleteQuestion={handleDeleteQuestion}
+            onBulkUpdateQuestions={handleBulkUpdateQuestions}
             onNotify={showToast}
             onOpenKickModal={() => setIsKickModalOpen(true)}
             onOpenGhostAdmin={() => setIsGhostAdminOpen(true)}
             onStartQuiz={handleStartQuiz}
+            roomPin={roomPin}
+            onUpdateRoomPin={setRoomPin}
+            isUnlocked={isAdminUnlocked}
+            onUnlock={handleUnlockAdmin}
+            onLock={handleLockAdmin}
+            playersCount={42}
           />
         )}
       </main>
 
-      {/* Bottom Footer */}
-      <Footer />
+      {/* Bottom Footer with discreet navigation */}
+      <Footer
+        currentScreen={currentScreen}
+        onScreenChange={setCurrentScreen}
+      />
 
       {/* Dynamic Toast Feedback */}
       <Toast message={toastMessage} />

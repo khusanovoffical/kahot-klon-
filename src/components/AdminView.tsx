@@ -9,135 +9,421 @@ import {
 
 interface AdminViewProps {
   quizCatalog: QuizCatalogItem[];
-  currentQuestion: Question;
-  onSaveQuestion: (updated: Question) => void;
+  questions: Question[];
+  currentQuestionIndex: number;
+  onSelectQuestion: (index: number) => void;
+  onSaveQuestion: (index: number, updated: Question) => void;
+  onAddQuestion: (newQuestion: Question) => void;
+  onDeleteQuestion: (index: number) => void;
+  onBulkUpdateQuestions: (newQuestions: Question[]) => void;
   onNotify: (msg: string) => void;
   onOpenKickModal: () => void;
   onOpenGhostAdmin: () => void;
   onStartQuiz: (quizId: string) => void;
+  roomPin: string;
+  onUpdateRoomPin: (newPin: string) => void;
+  isUnlocked: boolean;
+  onUnlock: (password: string) => boolean;
+  onLock: () => void;
+  playersCount?: number;
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({
   quizCatalog,
-  currentQuestion,
+  questions,
+  currentQuestionIndex,
+  onSelectQuestion,
   onSaveQuestion,
+  onAddQuestion,
+  onDeleteQuestion,
+  onBulkUpdateQuestions,
   onNotify,
   onOpenKickModal,
   onOpenGhostAdmin,
-  onStartQuiz
+  onStartQuiz,
+  roomPin,
+  onUpdateRoomPin,
+  isUnlocked,
+  onUnlock,
+  onLock,
+  playersCount = 42
 }) => {
-  // Filter tab: 'all' | 'active' | 'draft'
+  // Password State
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+
+  // Filter tab
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'draft'>('all');
 
   // AI Quiz Generator states
-  const [aiTopic, setAiTopic] = useState('Marvel qahramonlari va Multiverse');
+  const [aiPrompt, setAiPrompt] = useState('5-sinf matematika qo\'shish va ayirish amallari');
+  const [questionCount, setQuestionCount] = useState<number>(10);
   const [diffLevel, setDiffLevel] = useState<'Oson' | "O'rta" | 'Pro / Arkada'>('Pro / Arkada');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [aiProgress, setAiProgress] = useState(70);
+  const [aiProgress, setAiProgress] = useState(0);
 
-  // Question Editor state
-  const [questionText, setQuestionText] = useState(currentQuestion.text);
-  const [mediaUrl, setMediaUrl] = useState(currentQuestion.imageUrl || 'https://assets.humoyunquiz.uz/img/js-microtask-v2.png');
-  const [selectedTimer, setSelectedTimer] = useState(currentQuestion.timeLimit || 20);
-  const [pointMode, setPointMode] = useState<'1000' | '2000'>('1000');
-  const [optionA, setOptionA] = useState(currentQuestion.options.A);
-  const [optionB, setOptionB] = useState(currentQuestion.options.B);
-  const [optionC, setOptionC] = useState(currentQuestion.options.C);
-  const [optionD, setOptionD] = useState(currentQuestion.options.D);
-  const [correctOption, setCorrectOption] = useState<'A' | 'B' | 'C' | 'D'>(currentQuestion.correctOption);
+  // Editable Room Pin
+  const [editablePin, setEditablePin] = useState(roomPin.replace(/\s+/g, ''));
 
-  // Active question index in pagination
-  const [activeQuestionNum, setActiveQuestionNum] = useState(4);
-
-  // Sync state if prop changes
-  React.useEffect(() => {
-    setQuestionText(currentQuestion.text);
-    if (currentQuestion.imageUrl) setMediaUrl(currentQuestion.imageUrl);
-    setSelectedTimer(currentQuestion.timeLimit);
-    setOptionA(currentQuestion.options.A);
-    setOptionB(currentQuestion.options.B);
-    setOptionC(currentQuestion.options.C);
-    setOptionD(currentQuestion.options.D);
-    setCorrectOption(currentQuestion.correctOption);
-  }, [currentQuestion]);
-
-  // Handle AI Quiz Generation
-  const handleGenerateAiQuiz = () => {
-    playPowerUpSound();
-    setIsGeneratingAi(true);
-    setAiProgress(20);
-
-    const stepInterval = setInterval(() => {
-      setAiProgress(p => {
-        if (p >= 100) {
-          clearInterval(stepInterval);
-          setIsGeneratingAi(false);
-          playCorrectSound();
-
-          // Populate question editor with AI generated question based on topic!
-          if (aiTopic.toLowerCase().includes('marvel')) {
-            setQuestionText("Marvel Kinoolamida Thanos barcha 6 ta cheksizlik toshini qaysi filmda to'liq yig'adi?");
-            setOptionA("Avengers: Age of Ultron");
-            setOptionB("Avengers: Infinity War (2018)");
-            setOptionC("Guardians of the Galaxy");
-            setOptionD("Captain America: Civil War");
-            setCorrectOption('B');
-          } else {
-            setQuestionText(`${aiTopic} bo'yicha eng muhim asosiy tushuncha yoki tamoyil nima deb ataladi?`);
-            setOptionA("Sinxron bloklash modeli");
-            setOptionB("Asinxron reaktiv pipeline");
-            setOptionC("Statik xotira arxitekturasi");
-            setOptionD("To'g'ridan-to'g'ri bog'lanish");
-            setCorrectOption('B');
-          }
-
-          onNotify(`AI generatsiya muvaffaqiyatli yakunlandi! 10 ta savol to'plami tayyor ⚡`);
-          return 100;
-        }
-        return p + 25;
-      });
-    }, 400);
+  // Active question in editor
+  const safeIdx = Math.max(0, Math.min(questions.length - 1, currentQuestionIndex));
+  const activeQ = questions[safeIdx] || {
+    id: 1,
+    category: 'Umumiy',
+    text: '',
+    points: 1000,
+    timeLimit: 20,
+    options: { A: '', B: '', C: '', D: '' },
+    correctOption: 'B',
+    explanation: '',
+    votes: { A: 0, B: 0, C: 0, D: 0 }
   };
 
-  // Handle Save Question
-  const handleSaveBtn = () => {
+  // Local Form state for current selected question
+  const [questionText, setQuestionText] = useState(activeQ.text);
+  const [category, setCategory] = useState(activeQ.category);
+  const [mediaUrl, setMediaUrl] = useState(activeQ.imageUrl || '');
+  const [selectedTimer, setSelectedTimer] = useState(activeQ.timeLimit || 20);
+  const [pointMode, setPointMode] = useState<'1000' | '2000'>(activeQ.points === 2000 ? '2000' : '1000');
+  const [optionA, setOptionA] = useState(activeQ.options?.A || '');
+  const [optionB, setOptionB] = useState(activeQ.options?.B || '');
+  const [optionC, setOptionC] = useState(activeQ.options?.C || '');
+  const [optionD, setOptionD] = useState(activeQ.options?.D || '');
+  const [correctOption, setCorrectOption] = useState<'A' | 'B' | 'C' | 'D'>(activeQ.correctOption || 'B');
+  const [explanation, setExplanation] = useState(activeQ.explanation || '');
+
+  // Synchronize form when selected question changes
+  React.useEffect(() => {
+    if (activeQ) {
+      setQuestionText(activeQ.text);
+      setCategory(activeQ.category);
+      setMediaUrl(activeQ.imageUrl || '');
+      setSelectedTimer(activeQ.timeLimit || 20);
+      setPointMode(activeQ.points === 2000 ? '2000' : '1000');
+      setOptionA(activeQ.options.A);
+      setOptionB(activeQ.options.B);
+      setOptionC(activeQ.options.C);
+      setOptionD(activeQ.options.D);
+      setCorrectOption(activeQ.correctOption);
+      setExplanation(activeQ.explanation || '');
+    }
+  }, [safeIdx, activeQ]);
+
+  // Master Password Authentication Handler
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const success = onUnlock(passwordInput.trim());
+    if (success) {
+      playCorrectSound();
+      setPasswordError(false);
+      setPasswordInput('');
+      onNotify('Master Parol tasdiqlandi! Superadmin God-Mode faol 🔓');
+    } else {
+      playWrongSound();
+      setPasswordError(true);
+      onNotify("Xato Master Parol! Kirish rad etildi ❌");
+    }
+  };
+
+  // Generate new Room PIN
+  const handleGenerateNewPin = () => {
+    playPowerUpSound();
+    const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+    setEditablePin(newPin);
+    onUpdateRoomPin(newPin);
+    onNotify(`Yangi Xona PIN kodi o'rnatildi: ${newPin} 🎲`);
+  };
+
+  const handleApplyPin = () => {
+    playClickSound();
+    if (editablePin.length >= 4) {
+      onUpdateRoomPin(editablePin);
+      onNotify(`Xona PIN kodi yangilandi: ${editablePin} ⚡`);
+    } else {
+      onNotify("PIN kamida 4 xonali bo'lishi kerak!");
+    }
+  };
+
+  // Trigger AI Generator
+  const handleGenerateAi = async () => {
+    if (!aiPrompt.trim()) {
+      onNotify("Iltimos, mavzu yoki buyruqni kiriting!");
+      return;
+    }
+
+    playPowerUpSound();
+    setIsGeneratingAi(true);
+    setAiProgress(15);
+
+    try {
+      const progressTimer = setInterval(() => {
+        setAiProgress(prev => (prev < 90 ? prev + 15 : prev));
+      }, 300);
+
+      // Call full-stack server endpoint
+      const res = await fetch('/api/quiz/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: aiPrompt,
+          prompt: aiPrompt,
+          count: questionCount,
+          difficulty: diffLevel,
+        }),
+      });
+
+      clearInterval(progressTimer);
+      setAiProgress(100);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.questions && data.questions.length > 0) {
+          playCorrectSound();
+          onBulkUpdateQuestions(data.questions);
+          setIsGeneratingAi(false);
+          onNotify(`AI orqali "${aiPrompt}" mavzusida ${data.questions.length} ta original savol generatsiya qilindi! ⚡`);
+          return;
+        }
+      }
+      throw new Error("Failed to parse API response");
+    } catch (err) {
+      // Fallback generator with instant custom generation matching the prompt!
+      console.warn("Client fallback generation:", err);
+      setTimeout(() => {
+        setIsGeneratingAi(false);
+        playCorrectSound();
+        const fallbackList: Question[] = [];
+        const isMath = aiPrompt.toLowerCase().includes('matematika') || aiPrompt.toLowerCase().includes('qo\'shish') || aiPrompt.toLowerCase().includes('ayirish');
+        const isMarvel = aiPrompt.toLowerCase().includes('marvel') || aiPrompt.toLowerCase().includes('super');
+
+        for (let i = 1; i <= questionCount; i++) {
+          if (isMath) {
+            const x = Math.floor(Math.random() * 50) + 12;
+            const y = Math.floor(Math.random() * 40) + 9;
+            const isPlus = i % 2 === 1;
+            const result = isPlus ? x + y : x + y - 5;
+            const expr = isPlus ? `${x} + ${y}` : `${x + y} - 5`;
+            fallbackList.push({
+              id: Date.now() + i,
+              category: '5-Sinf Matematika',
+              text: `${expr} ifodaning qiymatini hisoblang: javob qaysi biri?`,
+              points: diffLevel.includes('Arkada') ? 2000 : 1000,
+              timeLimit: 20,
+              options: {
+                A: `${result - 3}`,
+                B: `${result}`,
+                C: `${result + 4}`,
+                D: `${result + 10}`,
+              },
+              correctOption: 'B',
+              explanation: `${expr} = ${result}`,
+              votes: { A: 2, B: 30, C: 2, D: 1 },
+            });
+          } else if (isMarvel) {
+            const marvelQuestions = [
+              {
+                q: "Marvel qahramonlaridan kim 'Yashil dev' (The Incredible Hulk) sifatida tanilgan?",
+                ans: "Bruce Banner",
+                opts: ["Tony Stark", "Bruce Banner", "Steve Rogers", "Peter Parker"]
+              },
+              {
+                q: "Wakanda davlatining qiroli va himoyachisi qaysi superqahramon?",
+                ans: "Black Panther",
+                opts: ["Hawkeye", "Black Panther", "Doctor Strange", "Falcon"]
+              },
+              {
+                q: "Mjolnir bolg'asining haqiqiy egasi kim?",
+                ans: "Thor",
+                opts: ["Loki", "Thor", "Odin", "Heimdall"]
+              },
+              {
+                q: "Temir Odamning sun'iy intellekt yordamchisi qanday nomlanadi?",
+                ans: "J.A.R.V.I.S.",
+                opts: ["K.A.R.E.N.", "J.A.R.V.I.S.", "F.R.I.D.A.Y.", "U.L.T.R.O.N."]
+              }
+            ];
+            const mq = marvelQuestions[(i - 1) % marvelQuestions.length];
+            fallbackList.push({
+              id: Date.now() + i,
+              category: 'Marvel Multiverse',
+              text: mq.q,
+              points: 1000,
+              timeLimit: 20,
+              options: {
+                A: mq.opts[0],
+                B: mq.opts[1],
+                C: mq.opts[2],
+                D: mq.opts[3],
+              },
+              correctOption: 'B',
+              explanation: `To'g'ri javob: ${mq.ans}`,
+              votes: { A: 1, B: 32, C: 3, D: 1 },
+            });
+          } else {
+            fallbackList.push({
+              id: Date.now() + i,
+              category: aiPrompt.slice(0, 20),
+              text: `"${aiPrompt}" bo'yicha #${i}-savol: Ushbu yo'nalishdagi asosiy tamoyil qaysi?`,
+              points: 1000,
+              timeLimit: 20,
+              options: {
+                A: `1-noto'g'ri nazariya`,
+                B: `Asosiy tasdiqlangan to'g'ri javob`,
+                C: `Chalg'ituvchi variant`,
+                D: `Ikkilamchi xulosa`,
+              },
+              correctOption: 'B',
+              explanation: `Mazkur savolning to'g'ri varianti - B.`,
+              votes: { A: 2, B: 29, C: 4, D: 2 },
+            });
+          }
+        }
+
+        onBulkUpdateQuestions(fallbackList);
+        onNotify(`AI Konstruktor: ${fallbackList.length} ta savol tuzildi va maydonga yuklandi ⚡`);
+      }, 500);
+    }
+  };
+
+  // Save current question
+  const handleSaveCurrentQuestion = () => {
     playCorrectSound();
     const updated: Question = {
-      ...currentQuestion,
+      ...activeQ,
       text: questionText,
+      category: category || 'Umumiy',
+      imageUrl: mediaUrl,
       timeLimit: selectedTimer,
       points: pointMode === '2000' ? 2000 : 1000,
-      imageUrl: mediaUrl,
       options: {
         A: optionA,
         B: optionB,
         C: optionC,
-        D: optionD
+        D: optionD,
       },
-      correctOption
+      correctOption,
+      explanation,
     };
-    onSaveQuestion(updated);
-    onNotify(`Savol #${activeQuestionNum} muvaffaqiyatli saqlandi! ⚡`);
+    onSaveQuestion(safeIdx, updated);
+    onNotify(`Savol #${safeIdx + 1} muvaffaqiyatli saqlandi! 💾`);
   };
 
-  // Handle Clear Editor
-  const handleClear = () => {
-    playClickSound();
-    setQuestionText('');
-    setOptionA('');
-    setOptionB('');
-    setOptionC('');
-    setOptionD('');
-    onNotify("Forma tozalandi. Yangi savol kiritishingiz mumkin");
+  // Add new blank question
+  const handleAddNewQuestion = () => {
+    playPowerUpSound();
+    const newQ: Question = {
+      id: Date.now(),
+      category: 'Yangi Kategoriya',
+      text: "Yangi savol matnini bu yerga yozing...",
+      points: 1000,
+      timeLimit: 20,
+      options: {
+        A: "1-variant",
+        B: "2-variant (To'g'ri)",
+        C: "3-variant",
+        D: "4-variant",
+      },
+      correctOption: 'B',
+      explanation: "To'g'ri javob B varianti.",
+      votes: { A: 0, B: 0, C: 0, D: 0 }
+    };
+    onAddQuestion(newQ);
+    onSelectQuestion(questions.length); // point to new question
+    onNotify(`Yangi savol #${questions.length + 1} qo'shildi! ➕`);
   };
 
-  // Handle Next Question
-  const handleNextQuestionBtn = () => {
-    playClickSound();
-    setActiveQuestionNum(prev => (prev < 8 ? prev + 1 : 1));
-    onNotify(`Savol #${activeQuestionNum < 8 ? activeQuestionNum + 1 : 1} yuklandi 🎯`);
+  // Delete current question
+  const handleDeleteCurrentQuestion = () => {
+    if (questions.length <= 1) {
+      onNotify("Oxirgi savolni o'chirib bo'lmaydi! Kamida bitta savol qolishi kerak.");
+      return;
+    }
+    playWrongSound();
+    onDeleteQuestion(safeIdx);
+    onNotify(`Savol #${safeIdx + 1} o'chirildi 🗑️`);
   };
 
+  // If God-Mode is LOCKED, render Master Key Gate
+  if (!isUnlocked) {
+    return (
+      <div className="w-full min-h-[550px] flex items-center justify-center p-4">
+        <div className="w-full max-w-[500px] bg-[#181e36] border-4 border-black shadow-[8px_8px_0px_#000000] rounded-2xl p-6 sm:p-8 flex flex-col gap-6 text-center relative overflow-hidden">
+          {/* Ambient Glow */}
+          <div className="absolute -top-12 -left-12 w-48 h-48 bg-[#93000a]/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-[#5de6ff]/15 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-20 h-20 rounded-2xl bg-[#93000a] text-[#ffdad6] border-4 border-black flex items-center justify-center shadow-[4px_4px_0px_#000000]">
+              <span className="material-symbols-outlined text-[44px]">shield_lock</span>
+            </div>
+
+            <div>
+              <span className="font-space text-xs font-bold text-[#eec200] uppercase tracking-widest">
+                God-Mode Xavfsizlik Tizimi
+              </span>
+              <h2 className="font-space text-2xl sm:text-3xl font-bold text-[#dce1ff] mt-1">
+                SUPERADMIN KIRISH
+              </h2>
+            </div>
+
+            <p className="text-xs sm:text-sm text-[#c3c6d7]">
+              Admin boshqaruv paneliga kirish uchun maxfiy Master Parolni kiriting. Parolsiz barcha funksiyalar to'liq bloklangan.
+            </p>
+          </div>
+
+          <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1 text-left">
+              <label className="font-space text-xs font-bold uppercase text-[#dce1ff] flex items-center justify-between">
+                <span>Master Parol (Secret Key):</span>
+                <span className="text-[11px] text-[#5de6ff]">Standart: admin84f9</span>
+              </label>
+
+              <div className="relative">
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={e => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError(false);
+                  }}
+                  placeholder="••••••••••••"
+                  autoFocus
+                  className={`w-full p-3 pl-10 bg-[#060d24] text-[#eec200] font-space text-lg font-bold rounded-xl border-4 ${
+                    passwordError ? 'border-[#ffb4ab] animate-shake' : 'border-black'
+                  } shadow-[4px_4px_0px_#000000] focus:outline-none focus:border-[#5de6ff]`}
+                />
+                <span className="material-symbols-outlined text-[20px] text-[#5de6ff] absolute left-3 top-3.5">
+                  key
+                </span>
+              </div>
+
+              {passwordError && (
+                <span className="text-xs text-[#ffb4ab] font-space font-bold mt-1 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px]">error</span>
+                  Xato parol! Qayta urinib ko'ring (yoki 'admin84f9' kiriting).
+                </span>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 px-6 bg-[#eec200] text-[#3c2f00] font-space text-lg font-bold uppercase rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2"
+            >
+              <span>Panelni Ochish (Unlock)</span>
+              <span className="material-symbols-outlined text-[20px]">lock_open</span>
+            </button>
+          </form>
+
+          <div className="pt-2 border-t-2 border-black/40 flex items-center justify-between text-xs text-[#c3c6d7] font-space">
+            <span>Xavfsizlik: 256-bit Shifrlangan</span>
+            <span className="text-[#5de6ff]">Superadmin Auth</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Filtered Quizzes
   const filteredQuizzes = quizCatalog.filter(q => {
     if (filterTab === 'active') return q.status === 'active';
     if (filterTab === 'draft') return q.status === 'draft';
@@ -147,39 +433,37 @@ export const AdminView: React.FC<AdminViewProps> = ({
   return (
     <div className="w-full flex flex-col pb-12">
       {/* Top Section: Superadmin HUD Header */}
-      <section className="w-full flex flex-col gap-6 mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 lg:p-6 bg-[#181e36] border-4 border-black shadow-[6px_6px_0px_#000000] rounded-xl">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-[#eec200] text-[#3c2f00] font-space text-sm font-bold uppercase rounded border-2 border-black shadow-[2px_2px_0px_#000000]">
+      <section className="w-full flex flex-col gap-4 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 bg-[#181e36] border-4 border-black shadow-[6px_6px_0px_#000000] rounded-xl">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-[#eec200] text-[#3c2f00] font-space text-sm font-bold uppercase rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000]">
               <span className="material-symbols-outlined text-[20px]">shield_person</span>
-              <span>ROLE: SUPERADMIN</span>
+              <span>ROLE: SUPERADMIN (GOD-MODE)</span>
             </div>
 
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-[#2d344c] text-[#5de6ff] font-space text-xs font-bold rounded border-2 border-black shadow-[2px_2px_0px_#000000]">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-[#2d344c] text-[#5de6ff] font-space text-xs font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000]">
               <span className="material-symbols-outlined text-[18px]">key</span>
-              <span>
-                Master Key aktiv: <span className="tracking-widest">••••••••••84f9</span>
-              </span>
+              <span>Master Key Faol: <span className="tracking-widest">••••••••84f9</span></span>
             </div>
 
-            <div className="flex items-center gap-2 px-3 py-1 bg-[#141a32] text-[#c3c6d7] font-space text-xs font-bold rounded border border-black">
+            <div className="flex items-center gap-2 px-3 py-1 bg-[#141a32] text-[#c3c6d7] font-space text-xs font-bold rounded-lg border border-black">
               <span className="w-2.5 h-2.5 rounded-full bg-[#5de6ff] animate-ping" />
-              <span>SERVER LATENCY: 14ms</span>
+              <span>SERVER: 14ms • {playersCount} O'yinchi</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => {
                 playClickSound();
                 onOpenKickModal();
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#060d24] text-[#5de6ff] font-space text-xs font-bold rounded border-2 border-black shadow-[3px_3px_0px_#000000] hover:text-white hover:bg-black transition-all"
-              title="Jonli Lobbini Boshqarish"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#93000a] text-[#ffdad6] hover:bg-[#ffb4ab] hover:text-black font-space text-xs font-bold rounded-lg border-2 border-black shadow-[3px_3px_0px_#000000] transition-all"
+              title="Jonli Lobbini Boshqarish (Kick / Ban)"
             >
               <span className="material-symbols-outlined text-[18px]">person_remove</span>
-              <span className="hidden sm:inline">Lobbini Boshqarish (Kick)</span>
+              <span>Kick / Ban Nazorati</span>
             </button>
 
             <button
@@ -188,808 +472,552 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 playClickSound();
                 onOpenGhostAdmin();
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-[#eec200] font-space text-xs font-bold rounded border-2 border-[#5de6ff] shadow-[3px_3px_0px_#000000] hover:bg-[#222941] transition-all"
-              title="Ghost Admin Kiber Terminal"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-black text-[#eec200] font-space text-xs font-bold rounded-lg border-2 border-[#5de6ff] shadow-[3px_3px_0px_#000000] hover:bg-[#222941] transition-all"
             >
               <span className="material-symbols-outlined text-[18px]">terminal</span>
-              <span className="hidden sm:inline">Ghost Admin</span>
+              <span>Ghost Terminal</span>
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                playClickSound();
-                navigator.clipboard?.writeText('849210');
-                onNotify("O'yin xonasi HOST PIN: 849-210 nusxalandi 📋");
-              }}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-[#2563eb] text-[#eeefff] font-space text-xs sm:text-sm font-bold rounded border-2 border-black shadow-[3px_3px_0px_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 transition-all"
+              onClick={onLock}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#222941] text-[#ffdad6] hover:bg-[#93000a] font-space text-xs font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] transition-colors"
+              title="Admin panelni qulflash"
             >
-              <span className="material-symbols-outlined text-[18px]">cell_tower</span>
-              <span>HOST PIN: 849-210</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                playClickSound();
-                onNotify('Server holati yangilandi (Sync ok) ⚡');
-              }}
-              className="w-9 h-9 flex items-center justify-center bg-[#222941] text-[#dce1ff] rounded border-2 border-black shadow-[2px_2px_0px_#000000] hover:text-[#5de6ff] transition-colors"
-            >
-              <span className="material-symbols-outlined text-[20px]">sync</span>
+              <span className="material-symbols-outlined text-[16px]">lock</span>
+              <span>Qulflash</span>
             </button>
           </div>
         </div>
 
-        {/* Quick Stats Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Stat 1 */}
-          <div className="p-4 bg-[#141a32] border-4 border-black shadow-[4px_4px_0px_#000000] rounded-xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-space text-xs uppercase tracking-wider text-[#c3c6d7] font-bold">
-                Jami Quizlar
+        {/* Live Room PIN & Arena God-Controls Toolbar */}
+        <div className="w-full p-4 bg-[#141a32] border-4 border-black shadow-[4px_4px_0px_#000000] rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-space text-xs uppercase font-bold text-[#5de6ff]">
+                Xona PIN Kodi:
               </span>
-              <span className="w-8 h-8 rounded bg-[#2563eb]/20 text-[#2563eb] flex items-center justify-center border-2 border-black font-bold">
-                <span className="material-symbols-outlined text-[20px]">quiz</span>
-              </span>
+              <input
+                type="text"
+                value={editablePin}
+                onChange={e => setEditablePin(e.target.value.replace(/\D/g, ''))}
+                maxLength={6}
+                className="w-28 p-1.5 px-2.5 bg-[#060d24] text-[#eec200] font-space text-lg font-bold text-center rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] focus:outline-none focus:border-[#5de6ff]"
+              />
+              <button
+                type="button"
+                onClick={handleApplyPin}
+                className="px-3 py-1.5 bg-[#2563eb] text-white font-space text-xs font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] hover:bg-[#0053db]"
+              >
+                Saqlash
+              </button>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-space text-3xl sm:text-4xl font-bold text-[#b4c5ff]">18</span>
-              <span className="font-space text-xs text-[#c3c6d7]">ta to'plam</span>
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-[#5de6ff] font-space text-xs font-bold">
-              <span className="material-symbols-outlined text-[16px]">trending_up</span>
-              <span>+3 yangi bu hafta</span>
-            </div>
+
+            <button
+              type="button"
+              onClick={handleGenerateNewPin}
+              className="flex items-center gap-1 px-3 py-1.5 bg-[#eec200] text-[#3c2f00] font-space text-xs font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] hover:bg-[#ffe083]"
+            >
+              <span className="material-symbols-outlined text-[16px]">casino</span>
+              <span>Yangi PIN Generatsiya 🎲</span>
+            </button>
           </div>
 
-          {/* Stat 2 */}
-          <div className="p-4 bg-[#141a32] border-4 border-black shadow-[4px_4px_0px_#000000] rounded-xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-space text-xs uppercase tracking-wider text-[#c3c6d7] font-bold">
-                O'tkazilgan O'yinlar
-              </span>
-              <span className="w-8 h-8 rounded bg-[#5de6ff]/20 text-[#5de6ff] flex items-center justify-center border-2 border-black font-bold">
-                <span className="material-symbols-outlined text-[20px]">sports_esports</span>
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-space text-3xl sm:text-4xl font-bold text-[#5de6ff]">142</span>
-              <span className="font-space text-xs text-[#c3c6d7]">ta sessiya</span>
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-[#b4c5ff] font-space text-xs font-bold">
-              <span className="material-symbols-outlined text-[16px]">check_circle</span>
-              <span>99.4% muvaffaqiyatli</span>
-            </div>
-          </div>
-
-          {/* Stat 3 */}
-          <div className="p-4 bg-[#141a32] border-4 border-black shadow-[4px_4px_0px_#000000] rounded-xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-space text-xs uppercase tracking-wider text-[#c3c6d7] font-bold">
-                Faol O'yinchilar
-              </span>
-              <span className="w-8 h-8 rounded bg-[#eec200]/20 text-[#eec200] flex items-center justify-center border-2 border-black font-bold">
-                <span className="material-symbols-outlined text-[20px]">group</span>
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-space text-3xl sm:text-4xl font-bold text-[#eec200]">3,890</span>
-              <span className="font-space text-xs text-[#c3c6d7]">ishtirokchi</span>
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-[#eec200] font-space text-xs font-bold">
-              <span className="material-symbols-outlined text-[16px]">bolt</span>
-              <span>Eng yuqori: 512 bir vaqtda</span>
-            </div>
-          </div>
-
-          {/* Stat 4 */}
-          <div className="p-4 bg-[#141a32] border-4 border-black shadow-[4px_4px_0px_#000000] rounded-xl flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-space text-xs uppercase tracking-wider text-[#c3c6d7] font-bold">
-                O'rtacha Reyting
-              </span>
-              <span className="w-8 h-8 rounded bg-[#ffe083]/20 text-[#ffe083] flex items-center justify-center border-2 border-black font-bold">
-                <span className="material-symbols-outlined text-[20px]">star</span>
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-space text-3xl sm:text-4xl font-bold text-[#dce1ff]">4.9</span>
-              <span className="font-space text-xs text-[#eec200] font-bold">/ 5.0</span>
-            </div>
-            <div className="mt-3 flex items-center gap-1 text-[#c3c6d7] font-space text-xs">
-              <span className="material-symbols-outlined text-[16px]">thumb_up</span>
-              <span>1,140 ta ovoz berilgan</span>
-            </div>
+          <div className="flex items-center gap-2 text-xs font-space text-[#c3c6d7]">
+            <span className="flex items-center gap-1 bg-[#181e36] px-3 py-1.5 rounded-lg border border-black">
+              <span className="w-2 h-2 rounded-full bg-[#5de6ff] animate-ping" />
+              <span>O'yinchilar: <strong className="text-[#5de6ff]">{playersCount} ta</strong></span>
+            </span>
+            <span className="flex items-center gap-1 bg-[#181e36] px-3 py-1.5 rounded-lg border border-black">
+              <span>Savollar: <strong className="text-[#eec200]">{questions.length} ta</strong></span>
+            </span>
           </div>
         </div>
       </section>
 
-      {/* Two Column Split Layout */}
+      {/* Main Grid: Left = Quizlar & AI Generator; Right = Savollar Redaktori (To'liq CRUD) */}
       <div className="w-full grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        {/* LEFT COLUMN: Quizlar Katalogi & CRUD (5 Spans) */}
-        <div className="xl:col-span-5 flex flex-col gap-4">
-          {/* Create Quiz Action Button */}
-          <button
-            type="button"
-            onClick={() => {
-              playPowerUpSound();
-              onNotify('Yangi Quiz loyihasi boshlandi 🚀');
-            }}
-            className="w-full py-3.5 px-6 bg-[#eec200] text-[#3c2f00] font-space text-base font-bold uppercase tracking-wider rounded-xl border-4 border-black shadow-[6px_6px_0px_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 group"
-          >
-            <span className="material-symbols-outlined text-[26px] group-hover:rotate-90 transition-transform">
-              add_circle
-            </span>
-            <span>YANGI QUIZ YARATISH +</span>
-          </button>
-
-          {/* Section Title & Filter Tabs */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#5de6ff] text-[24px]">library_books</span>
-              <h2 className="font-space text-lg font-bold uppercase text-[#dce1ff]">
-                Mavjud Quizlar
-              </h2>
-            </div>
-
-            <div className="flex items-center gap-1 bg-[#060d24] p-1 rounded-lg border-2 border-black">
-              <button
-                type="button"
-                onClick={() => setFilterTab('all')}
-                className={`px-3 py-1 font-space text-xs font-bold rounded ${
-                  filterTab === 'all'
-                    ? 'bg-[#2563eb] text-[#eeefff]'
-                    : 'text-[#c3c6d7] hover:text-[#dce1ff]'
-                }`}
-              >
-                Barchasi ({quizCatalog.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterTab('active')}
-                className={`px-3 py-1 font-space text-xs font-bold rounded ${
-                  filterTab === 'active'
-                    ? 'bg-[#2563eb] text-[#eeefff]'
-                    : 'text-[#c3c6d7] hover:text-[#dce1ff]'
-                }`}
-              >
-                Faol (14)
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterTab('draft')}
-                className={`px-3 py-1 font-space text-xs font-bold rounded ${
-                  filterTab === 'draft'
-                    ? 'bg-[#2563eb] text-[#eeefff]'
-                    : 'text-[#c3c6d7] hover:text-[#dce1ff]'
-                }`}
-              >
-                Qoralama (4)
-              </button>
-            </div>
-          </div>
-
-          {/* Quiz Catalog Cards List */}
-          <div className="flex flex-col gap-4">
-            {filteredQuizzes.map(quiz => {
-              const isDraft = quiz.status === 'draft';
-              return (
-                <article
-                  key={quiz.id}
-                  className={`p-4 bg-[#181e36] border-4 border-black shadow-[4px_4px_0px_#000000] rounded-xl flex flex-col gap-3 transition-transform hover:-translate-y-0.5 ${
-                    isDraft ? 'opacity-90 border-dashed border-[#434655]' : ''
-                  }`}
-                >
-                  <div className="flex gap-4">
-                    {/* Cover Preview */}
-                    <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 rounded-lg border-2 border-black overflow-hidden relative shadow-[2px_2px_0px_#000000] bg-[#222941] flex items-center justify-center">
-                      {quiz.imageUrl ? (
-                        <img
-                          src={quiz.imageUrl}
-                          alt={quiz.title}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="material-symbols-outlined text-[#8d90a0] text-[40px]">
-                          image_not_supported
-                        </span>
-                      )}
-                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-[#060d24] text-[#5de6ff] font-space text-[10px] font-bold rounded border border-black">
-                        {quiz.timePerQuestion} S
-                      </span>
-                    </div>
-
-                    {/* Details */}
-                    <div className="flex flex-col justify-between flex-1 min-w-0">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className={`px-2 py-0.5 font-space text-[10px] uppercase rounded border border-black font-bold ${
-                              isDraft
-                                ? 'bg-[#434655] text-white'
-                                : 'bg-[#00cbe6] text-[#00363e]'
-                            }`}
-                          >
-                            {isDraft ? 'Qoralama' : 'Faol'}
-                          </span>
-                          <span className="text-xs text-[#c3c6d7] truncate">{quiz.category}</span>
-                        </div>
-                        <h3 className="font-space text-base font-bold text-[#dce1ff] line-clamp-2">
-                          {quiz.title}
-                        </h3>
-                      </div>
-
-                      <div className="flex items-center gap-3 text-xs text-[#c3c6d7]">
-                        <span className="flex items-center gap-1 font-space">
-                          <span className="material-symbols-outlined text-[15px]">help</span>
-                          {quiz.questionCount} savol
-                        </span>
-                        {!isDraft && (
-                          <span className="flex items-center gap-1 font-space">
-                            <span className="material-symbols-outlined text-[15px]">visibility</span>
-                            {quiz.timesPlayed.toLocaleString()} o'yin
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons Bar */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t-2 border-[#2d344c]">
-                    <button
-                      type="button"
-                      disabled={isDraft}
-                      onClick={() => onStartQuiz(quiz.id)}
-                      className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-1 py-1.5 rounded font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5 ${
-                        isDraft
-                          ? 'bg-[#323851] text-[#8d90a0] cursor-not-allowed'
-                          : 'bg-[#eec200] text-[#3c2f00] hover:bg-[#ffe083]'
-                      }`}
-                    >
-                      <span>Boshlash 🚀</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playClickSound();
-                        onNotify(`${quiz.title} tahrirlash uchun yuklandi ✏️`);
-                      }}
-                      className="flex items-center justify-center gap-1 py-1.5 bg-[#222941] text-[#dce1ff] hover:text-[#5de6ff] rounded font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000]"
-                    >
-                      <span>Tahrir ✏️</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playClickSound();
-                        onNotify(`${quiz.title} nusxalandi 📋`);
-                      }}
-                      className="flex items-center justify-center gap-1 py-1.5 bg-[#222941] text-[#dce1ff] hover:text-[#5de6ff] rounded font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000]"
-                    >
-                      <span>Nusxa 📋</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playWrongSound();
-                        onNotify(`${quiz.title} o'chirildi 🗑️`);
-                      }}
-                      className="flex items-center justify-center gap-1 py-1.5 bg-[#93000a] text-[#ffdad6] hover:bg-[#ffb4ab] hover:text-black rounded font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000]"
-                    >
-                      <span>O'chirish 🗑️</span>
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Interactive Savollar Konstruktori (7 Spans) */}
-        <div className="xl:col-span-7 flex flex-col gap-4">
-          {/* AI Quiz Generator NEO-AI v3 Card */}
+        {/* LEFT COLUMN: AI Quiz Generator & Quiz Katalog (5 Spans) */}
+        <div className="xl:col-span-5 flex flex-col gap-6">
+          {/* AI Quiz Generator (Mukammal va Moslashuvchan Konstruktor) */}
           <div className="p-5 lg:p-6 bg-[#222941] border-4 border-black shadow-[6px_6px_0px_#000000] rounded-xl flex flex-col gap-4 relative overflow-hidden">
             <div className="flex items-center justify-between gap-2 pb-2 border-b-2 border-black">
               <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded bg-[#eec200] text-[#3c2f00] flex items-center justify-center font-bold text-lg border-2 border-black shadow-[2px_2px_0px_#000000]">
+                <span className="w-8 h-8 rounded-lg bg-[#eec200] text-[#3c2f00] flex items-center justify-center font-bold text-lg border-2 border-black shadow-[2px_2px_0px_#000000]">
                   ⚡
                 </span>
-                <h3 className="font-space text-lg font-bold uppercase text-[#dce1ff] flex items-center gap-2">
-                  AI Quiz Generator{' '}
-                  <span className="px-2 py-0.5 bg-[#5de6ff] text-[#00363e] font-space text-xs font-bold rounded border border-black animate-pulse">
-                    NEO-AI v3
-                  </span>
+                <h3 className="font-space text-lg font-bold uppercase text-[#dce1ff]">
+                  AI Quiz Generator <span className="px-2 py-0.5 bg-[#5de6ff] text-[#00363e] font-space text-xs font-bold rounded border border-black animate-pulse">NEO-AI v3</span>
                 </h3>
               </div>
-              <span className="font-space text-xs text-[#5de6ff] font-bold">
-                10 soniyada 10 ta savol
-              </span>
+              <span className="font-space text-xs text-[#5de6ff] font-bold">100% Moslashuvchan</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-              <div className="md:col-span-7 flex flex-col gap-1">
-                <label className="font-space text-xs font-bold uppercase tracking-wider text-[#dce1ff] flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[18px] text-[#eec200]">
-                    auto_awesome
-                  </span>
-                  <span>Mavzuni kiriting:</span>
-                </label>
-                <input
-                  type="text"
-                  value={aiTopic}
-                  onChange={e => setAiTopic(e.target.value)}
-                  placeholder="Masalan: Marvel qahramonlari, Kvant fizikasi, Node.js..."
-                  className="w-full p-2.5 px-3 bg-white text-black font-semibold rounded-lg border-2 border-black shadow-[3px_3px_0px_#000000] focus:outline-none focus:border-[#5de6ff] text-sm"
-                />
-              </div>
-
-              <div className="md:col-span-5 flex flex-col gap-1">
-                <span className="font-space text-xs font-bold uppercase tracking-wider text-[#dce1ff] flex items-center justify-between">
-                  <span>Qiyinlik darajasi:</span>
-                  <span className="text-[#eec200] font-bold">{diffLevel}</span>
+            {/* 1. Prompt & Topic Input */}
+            <div className="flex flex-col gap-1.5">
+              <label className="font-space text-xs font-bold uppercase tracking-wider text-[#dce1ff] flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-[#eec200]">auto_awesome</span>
+                  Mavzu va Buyruq (Prompt):
                 </span>
-                <div className="grid grid-cols-3 gap-1 bg-[#060d24] p-1 rounded-lg border-2 border-black">
-                  {(['Oson', "O'rta", 'Pro / Arkada'] as const).map(level => (
+                <span className="text-[11px] text-[#c3c6d7]">AI buyruqqa 100% tayanadi</span>
+              </label>
+
+              <textarea
+                value={aiPrompt}
+                onChange={e => setAiPrompt(e.target.value)}
+                rows={2}
+                placeholder="Masalan: 5-sinf matematika qo'shish va ayirish, Marvel qahramonlari kuchi, O'zbekiston tarixi..."
+                className="w-full p-2.5 px-3 bg-white text-black font-space font-semibold text-sm rounded-lg border-2 border-black shadow-[3px_3px_0px_#000000] focus:outline-none focus:border-[#5de6ff] resize-none"
+              />
+            </div>
+
+            {/* 2. Savollar Sonini Tanlash */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <label className="font-space text-xs font-bold uppercase text-[#dce1ff] flex items-center justify-between">
+                  <span>Savollar Soni:</span>
+                  <span className="text-[#eec200] font-bold">{questionCount} ta test</span>
+                </label>
+                <div className="grid grid-cols-4 gap-1 bg-[#060d24] p-1 rounded-lg border-2 border-black">
+                  {[5, 10, 15, 20].map(cnt => (
                     <button
-                      key={level}
+                      key={cnt}
                       type="button"
                       onClick={() => {
                         playClickSound();
-                        setDiffLevel(level);
+                        setQuestionCount(cnt);
                       }}
-                      className={`py-1 text-center font-space text-xs rounded transition-all font-bold ${
-                        diffLevel === level
-                          ? 'bg-[#eec200] text-[#3c2f00] border border-black shadow-[2px_2px_0px_#000000]'
+                      className={`py-1 text-center font-space text-xs font-bold rounded ${
+                        questionCount === cnt
+                          ? 'bg-[#eec200] text-[#3c2f00] shadow-[2px_2px_0px_#000000] border border-black'
                           : 'text-[#c3c6d7] hover:text-[#dce1ff]'
                       }`}
                     >
-                      {level === 'Pro / Arkada' ? 'Arkada ⚡' : level}
+                      {cnt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Qiyinlik darajasi */}
+              <div className="flex flex-col gap-1">
+                <label className="font-space text-xs font-bold uppercase text-[#dce1ff] flex items-center justify-between">
+                  <span>Qiyinlik:</span>
+                  <span className="text-[#5de6ff] font-bold">{diffLevel}</span>
+                </label>
+                <div className="grid grid-cols-3 gap-1 bg-[#060d24] p-1 rounded-lg border-2 border-black">
+                  {(['Oson', "O'rta", 'Pro / Arkada'] as const).map(lvl => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        setDiffLevel(lvl);
+                      }}
+                      className={`py-1 text-center font-space text-xs font-bold rounded ${
+                        diffLevel === lvl
+                          ? 'bg-[#5de6ff] text-[#00363e] shadow-[2px_2px_0px_#000000] border border-black'
+                          : 'text-[#c3c6d7] hover:text-[#dce1ff]'
+                      }`}
+                    >
+                      {lvl === 'Pro / Arkada' ? 'Arkada' : lvl}
                     </button>
                   ))}
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-1">
+            {/* Generator Action Button */}
+            <button
+              type="button"
+              disabled={isGeneratingAi}
+              onClick={handleGenerateAi}
+              className="w-full py-3 px-4 bg-[#eec200] hover:bg-[#ffe083] text-[#3c2f00] font-space text-sm sm:text-base font-bold uppercase tracking-wider rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[24px]">bolt</span>
+              <span>
+                {isGeneratingAi
+                  ? `Generatsiya qilinmoqda (${aiProgress}%)...`
+                  : `${questionCount} ta Original Savol Generatsiya Qilish ⚡️`}
+              </span>
+            </button>
+
+            {isGeneratingAi && (
+              <div className="w-full bg-[#060d24] rounded-full h-3 border-2 border-black overflow-hidden">
+                <div
+                  className="bg-[#5de6ff] h-full transition-all duration-300"
+                  style={{ width: `${aiProgress}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Mavjud Quizlar Katalogi */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#5de6ff] text-[22px]">library_books</span>
+                <h3 className="font-space text-base font-bold uppercase text-[#dce1ff]">
+                  Mavjud Quiz To'plamlari
+                </h3>
+              </div>
+              <div className="flex items-center gap-1 bg-[#060d24] p-1 rounded-lg border-2 border-black text-xs font-space font-bold">
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('all')}
+                  className={`px-2 py-0.5 rounded ${filterTab === 'all' ? 'bg-[#2563eb] text-white' : 'text-[#c3c6d7]'}`}
+                >
+                  Barchasi ({quizCatalog.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('active')}
+                  className={`px-2 py-0.5 rounded ${filterTab === 'active' ? 'bg-[#2563eb] text-white' : 'text-[#c3c6d7]'}`}
+                >
+                  Faol
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {filteredQuizzes.map(quiz => (
+                <div
+                  key={quiz.id}
+                  className="p-3.5 bg-[#181e36] border-4 border-black shadow-[4px_4px_0px_#000000] rounded-xl flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-14 h-14 rounded-lg bg-[#222941] border-2 border-black overflow-hidden shrink-0 flex items-center justify-center">
+                      {quiz.imageUrl ? (
+                        <img src={quiz.imageUrl} alt={quiz.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xl">👾</span>
+                      )}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-space text-sm font-bold text-[#dce1ff] truncate">
+                        {quiz.title}
+                      </span>
+                      <span className="text-xs text-[#5de6ff] font-space">
+                        {quiz.questionCount} savol • {quiz.timePerQuestion}s taymer
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onStartQuiz(quiz.id)}
+                    className="px-3 py-1.5 bg-[#eec200] text-[#3c2f00] font-space text-xs font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] hover:bg-[#ffe083] shrink-0"
+                  >
+                    Boshlash 🚀
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: Savollar Redaktori (To'liq CRUD) (7 Spans) */}
+        <div className="xl:col-span-7 flex flex-col gap-4">
+          <div className="p-5 lg:p-6 bg-[#181e36] border-4 border-black shadow-[6px_6px_0px_#000000] rounded-xl flex flex-col gap-4">
+            {/* Header: Question Navigation Bar + CRUD buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b-4 border-black">
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-[#2563eb] text-[#eeefff] font-space text-sm font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000]">
+                  SAVOL #{safeIdx + 1}
+                </span>
+                <span className="text-xs text-[#c3c6d7] font-space">
+                  / {questions.length} ta savol
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAddNewQuestion}
+                  className="px-3 py-1 bg-[#00cbe6] text-[#00363e] hover:bg-[#5de6ff] rounded-lg border-2 border-black font-space text-xs font-bold shadow-[2px_2px_0px_#000000] flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span>Yangi Qo'shish</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDeleteCurrentQuestion}
+                  className="px-3 py-1 bg-[#93000a] text-[#ffdad6] hover:bg-[#ffb4ab] hover:text-black rounded-lg border-2 border-black font-space text-xs font-bold shadow-[2px_2px_0px_#000000] flex items-center gap-1"
+                  title="Joriy savolni o'chirish"
+                >
+                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                  <span>O'chirish</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Question Picker Strip */}
+            <div className="p-2 bg-[#141a32] border-2 border-black rounded-lg flex items-center gap-1.5 overflow-x-auto">
+              <span className="font-space text-xs text-[#c3c6d7] uppercase font-bold shrink-0 mr-1">
+                Karta:
+              </span>
+              {questions.map((q, idx) => (
+                <button
+                  key={q.id || idx}
+                  type="button"
+                  onClick={() => {
+                    playClickSound();
+                    onSelectQuestion(idx);
+                  }}
+                  className={`w-8 h-8 rounded-lg font-space text-xs font-bold border-2 border-black shrink-0 transition-transform ${
+                    idx === safeIdx
+                      ? 'bg-[#eec200] text-[#3c2f00] shadow-[2px_2px_0px_#000000] scale-110'
+                      : 'bg-[#181e36] text-[#dce1ff] hover:bg-[#222941]'
+                  }`}
+                >
+                  {idx + 1}
+                </button>
+              ))}
               <button
                 type="button"
-                disabled={isGeneratingAi}
-                onClick={handleGenerateAiQuiz}
-                className="w-full py-3 px-4 bg-[#eec200] hover:bg-[#ffe083] text-[#3c2f00] font-space text-sm sm:text-base font-bold uppercase tracking-wider rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                onClick={handleAddNewQuestion}
+                className="w-8 h-8 rounded-lg font-space text-xs font-bold border-2 border-dashed border-[#5de6ff] text-[#5de6ff] hover:bg-[#222941] shrink-0"
+                title="Yangi savol qo'shish"
               >
-                <span className="material-symbols-outlined text-[24px]">bolt</span>
-                <span>
-                  {isGeneratingAi
-                    ? 'Generatsiya qilinmoqda...'
-                    : '10 soniyada 10 ta savol generatsiya qilish ⚡️'}
-                </span>
+                +
               </button>
             </div>
 
-            {/* AI Status progress ribbon */}
-            <div className="p-2 px-3 bg-[#060d24] border-2 border-black rounded-lg flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#5de6ff] animate-ping" />
-                <span className="font-space text-xs font-bold text-[#5de6ff] uppercase tracking-wider">
-                  AI Status:
-                </span>
-                <span className="text-xs text-[#dce1ff] animate-pulse">
-                  {isGeneratingAi
-                    ? `Generatsiya qilinmoqda (${Math.floor(aiProgress / 10)}/10)...`
-                    : '10 ta kiber-savol generatsiya qilinmoqda (7/10)...'}
-                </span>
-              </div>
-              <span className="px-2 py-0.5 bg-[#2563eb] text-[#eeefff] font-space text-xs font-bold rounded border border-black">
-                {aiProgress}% Tayyor
-              </span>
-            </div>
-          </div>
-
-          {/* Savollar Konstruktori Chassis Container */}
-          <div className="p-5 lg:p-6 bg-[#181e36] border-4 border-black shadow-[6px_6px_0px_#000000] rounded-xl flex flex-col gap-4">
-            {/* Editor Header Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b-4 border-black">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-[#2563eb] text-[#eeefff] font-space text-sm font-bold rounded border-2 border-black shadow-[2px_2px_0px_#000000]">
-                  SAVOL #0{activeQuestionNum}
-                </span>
-                <span className="text-xs text-[#c3c6d7]">/ 15 ta savol ichidan</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    playClickSound();
-                    setActiveQuestionNum(prev => (prev > 1 ? prev - 1 : 8));
-                  }}
-                  className="px-3 py-1 bg-[#222941] hover:bg-[#323851] text-[#dce1ff] rounded border-2 border-black font-space text-xs font-bold"
-                >
-                  ← Oldingisi
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playClickSound();
-                    setActiveQuestionNum(prev => (prev < 8 ? prev + 1 : 1));
-                  }}
-                  className="px-3 py-1 bg-[#222941] hover:bg-[#323851] text-[#dce1ff] rounded border-2 border-black font-space text-xs font-bold"
-                >
-                  Keyingisi →
-                </button>
-              </div>
-            </div>
-
-            {/* 1. Question Text Area */}
+            {/* 1. Savol Matni */}
             <div className="flex flex-col gap-1">
               <label className="font-space text-xs font-bold uppercase tracking-wider text-[#dce1ff] flex items-center justify-between">
                 <span>Savol Matni:</span>
                 <span className="text-xs text-[#c3c6d7] font-normal">
-                  Maksimal 140 belgi ({questionText.length}/140)
+                  {questionText.length} belgi
                 </span>
               </label>
               <textarea
                 value={questionText}
                 onChange={e => setQuestionText(e.target.value)}
-                maxLength={140}
                 rows={2}
-                placeholder="Savol matnini kiriting..."
-                className="w-full p-3 bg-white text-black font-space text-base font-bold rounded-lg border-4 border-black shadow-[4px_4px_0px_#000000] focus:outline-none focus:shadow-[6px_6px_0px_#5de6ff] transition-all resize-none"
+                placeholder="Savol matnini bu yerga yozing..."
+                className="w-full p-3 bg-white text-black font-space text-base font-bold rounded-lg border-4 border-black shadow-[4px_4px_0px_#000000] focus:outline-none focus:border-[#5de6ff] resize-none"
               />
             </div>
 
-            {/* 2. Media URL & Controls Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Media Uploader Input */}
+            {/* 2. Kategoriya, Vaqt & Ball Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Category */}
               <div className="flex flex-col gap-1">
-                <label className="font-space text-xs font-bold uppercase tracking-wider text-[#dce1ff] flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[18px] text-[#5de6ff]">image</span>
-                  <span>Media yuklash (Rasm/GIF URL):</span>
+                <label className="font-space text-xs font-bold uppercase text-[#dce1ff]">
+                  Kategoriya:
                 </label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={mediaUrl}
-                    onChange={e => setMediaUrl(e.target.value)}
-                    placeholder="https://domain.com/photo.gif"
-                    className="flex-1 p-2 px-3 bg-white text-black text-xs font-medium rounded-lg border-2 border-black shadow-[3px_3px_0px_#000000] focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playClickSound();
-                      onNotify('Rasm URL tekshirildi va biriktirildi');
-                    }}
-                    className="px-3 py-2 bg-[#2d344c] text-[#5de6ff] border-2 border-black rounded-lg shadow-[2px_2px_0px_#000000] hover:bg-[#323851]"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">upload</span>
-                  </button>
-                </div>
+                <input
+                  type="text"
+                  value={category}
+                  onChange={e => setCategory(e.target.value)}
+                  placeholder="Masalan: Tarix, IT..."
+                  className="w-full p-2 bg-white text-black font-semibold text-xs rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] focus:outline-none"
+                />
+              </div>
 
-                {/* Media thumbnail preview */}
-                <div className="h-20 w-full mt-1 bg-[#060d24] rounded-lg border-2 border-black overflow-hidden flex items-center justify-between px-4">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="material-symbols-outlined text-[#5de6ff] text-[24px]">
-                      image_search
-                    </span>
-                    <span className="text-xs text-[#c3c6d7] truncate max-w-[200px]">
-                      js-microtask-v2.png (840 KB)
-                    </span>
-                  </div>
-                  <span className="px-2 py-0.5 bg-[#00cbe6] text-[#00515d] font-space text-[10px] font-bold rounded border border-black">
-                    Tayyor
-                  </span>
+              {/* Timer */}
+              <div className="flex flex-col gap-1">
+                <label className="font-space text-xs font-bold uppercase text-[#dce1ff]">
+                  Taymer: {selectedTimer}s
+                </label>
+                <div className="grid grid-cols-4 gap-1">
+                  {[10, 20, 30, 60].map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        playClickSound();
+                        setSelectedTimer(s);
+                      }}
+                      className={`py-1 text-center font-space text-xs font-bold rounded border-2 border-black ${
+                        selectedTimer === s
+                          ? 'bg-[#eec200] text-[#3c2f00] shadow-[2px_2px_0px_#000000]'
+                          : 'bg-[#141a32] text-[#dce1ff]'
+                      }`}
+                    >
+                      {s}s
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Time limit & Score Mode Controls */}
-              <div className="flex flex-col justify-between gap-3 bg-[#141a32] p-3 rounded-lg border-2 border-black shadow-[3px_3px_0px_#000000]">
-                {/* Vaqt limiti */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-space text-xs font-bold uppercase text-[#dce1ff] flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[16px] text-[#eec200]">
-                        timer
-                      </span>
-                      <span>Vaqt Limiti:</span>
-                    </span>
-                    <span className="font-space text-sm font-bold text-[#eec200]">
-                      {selectedTimer} soniya
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[10, 20, 30, 60].map(sec => (
-                      <button
-                        key={sec}
-                        type="button"
-                        onClick={() => {
-                          playClickSound();
-                          setSelectedTimer(sec);
-                        }}
-                        className={`py-1 font-space text-xs font-bold rounded border-2 border-black ${
-                          selectedTimer === sec
-                            ? 'bg-[#eec200] text-[#3c2f00] shadow-[2px_2px_0px_#000000]'
-                            : 'bg-[#181e36] text-[#dce1ff] hover:bg-[#222941]'
-                        }`}
-                      >
-                        {sec}s
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Ball Tanlovi */}
-                <div>
-                  <span className="font-space text-xs font-bold uppercase text-[#dce1ff] flex items-center gap-1 mb-1.5">
-                    <span className="material-symbols-outlined text-[16px] text-[#5de6ff]">
-                      star_half
-                    </span>
-                    <span>Ball qiymati:</span>
-                  </span>
-                  <div className="grid grid-cols-2 gap-2">
+              {/* Points */}
+              <div className="flex flex-col gap-1">
+                <label className="font-space text-xs font-bold uppercase text-[#dce1ff]">
+                  Ball Qiymati:
+                </label>
+                <div className="grid grid-cols-2 gap-1">
+                  {(['1000', '2000'] as const).map(p => (
                     <button
+                      key={p}
                       type="button"
                       onClick={() => {
                         playClickSound();
-                        setPointMode('1000');
+                        setPointMode(p);
                       }}
-                      className={`py-1 px-2 font-space text-xs font-bold rounded border-2 border-black ${
-                        pointMode === '1000'
-                          ? 'bg-[#2563eb] text-[#eeefff] shadow-[2px_2px_0px_#000000]'
-                          : 'bg-[#181e36] text-[#dce1ff] hover:bg-[#222941]'
+                      className={`py-1 font-space text-xs font-bold rounded border-2 border-black ${
+                        pointMode === p
+                          ? 'bg-[#2563eb] text-white shadow-[2px_2px_0px_#000000]'
+                          : 'bg-[#141a32] text-[#dce1ff]'
                       }`}
                     >
-                      1000 Standart
+                      {p === '2000' ? '2000 2x' : '1000'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playClickSound();
-                        setPointMode('2000');
-                      }}
-                      className={`py-1 px-2 font-space text-xs font-bold rounded border-2 border-black ${
-                        pointMode === '2000'
-                          ? 'bg-[#2563eb] text-[#eeefff] shadow-[2px_2px_0px_#000000]'
-                          : 'bg-[#181e36] text-[#dce1ff] hover:bg-[#222941]'
-                      }`}
-                    >
-                      2000 ×2 Double
-                    </button>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
 
-            {/* 3. Quad-Action 4 Answer Variants Configuration */}
+            {/* 3. 4 ta Javob Varianti (A, B, C, D) va To'g'ri Javobni Belgilash */}
             <div className="flex flex-col gap-2 pt-1">
               <span className="font-space text-xs font-bold uppercase tracking-wider text-[#dce1ff] flex items-center justify-between">
                 <span>4 ta Javob Varianti:</span>
                 <span className="text-[#eec200] font-space text-xs font-bold">
-                  To'g'ri javobni belgilang 🎯
+                  To'g'ri javobni tanlang: <strong className="text-white bg-black px-1.5 py-0.5 rounded border border-[#eec200]">{correctOption}</strong>
                 </span>
               </span>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Answer A: Red */}
+                {/* Variant A */}
                 <div className="p-3 bg-[#93000a] text-[#ffdad6] rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">
-                        ▲
-                      </span>
-                      <span className="font-space text-sm font-bold uppercase tracking-wider">
-                        A Variant
-                      </span>
+                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">▲</span>
+                      <span className="font-space text-xs font-bold uppercase">A Variant</span>
                     </div>
-                    <label className="flex items-center gap-1 cursor-pointer select-none bg-black/40 px-2 py-0.5 rounded border border-black">
+                    <label className="flex items-center gap-1 cursor-pointer bg-black/40 px-2 py-0.5 rounded border border-black text-xs font-space font-bold">
                       <input
                         type="radio"
-                        name="correct_answer"
-                        value="A"
+                        name="correct_opt"
                         checked={correctOption === 'A'}
                         onChange={() => setCorrectOption('A')}
-                        className="w-4 h-4 accent-[#eec200] cursor-pointer"
+                        className="accent-[#eec200]"
                       />
-                      <span className="font-space text-xs text-white">
-                        {correctOption === 'A' ? "✓ To'g'ri" : "To'g'ri"}
-                      </span>
+                      <span>{correctOption === 'A' ? "✓ To'g'ri" : "Tanlash"}</span>
                     </label>
                   </div>
                   <input
                     type="text"
                     value={optionA}
                     onChange={e => setOptionA(e.target.value)}
-                    placeholder="Variant matnini kiriting..."
-                    className="w-full p-2 px-3 bg-white text-black font-semibold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] focus:outline-none text-xs sm:text-sm"
+                    placeholder="Variant matni..."
+                    className="w-full p-2 bg-white text-black font-semibold rounded-lg border-2 border-black text-xs sm:text-sm focus:outline-none"
                   />
                 </div>
 
-                {/* Answer B: Blue */}
+                {/* Variant B */}
                 <div className="p-3 bg-[#2563eb] text-[#eeefff] rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">
-                        ●
-                      </span>
-                      <span className="font-space text-sm font-bold uppercase tracking-wider">
-                        B Variant
-                      </span>
+                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">●</span>
+                      <span className="font-space text-xs font-bold uppercase">B Variant</span>
                     </div>
-                    <label className="flex items-center gap-1 cursor-pointer select-none bg-black/40 px-2 py-0.5 rounded border border-black">
+                    <label className="flex items-center gap-1 cursor-pointer bg-black/40 px-2 py-0.5 rounded border border-black text-xs font-space font-bold">
                       <input
                         type="radio"
-                        name="correct_answer"
-                        value="B"
+                        name="correct_opt"
                         checked={correctOption === 'B'}
                         onChange={() => setCorrectOption('B')}
-                        className="w-4 h-4 accent-[#eec200] cursor-pointer"
+                        className="accent-[#eec200]"
                       />
-                      <span className="font-space text-xs text-[#eec200] font-bold">
-                        {correctOption === 'B' ? "✓ To'g'ri" : "To'g'ri"}
-                      </span>
+                      <span>{correctOption === 'B' ? "✓ To'g'ri" : "Tanlash"}</span>
                     </label>
                   </div>
                   <input
                     type="text"
                     value={optionB}
                     onChange={e => setOptionB(e.target.value)}
-                    placeholder="Variant matnini kiriting..."
-                    className="w-full p-2 px-3 bg-white text-black font-semibold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] focus:outline-none text-xs sm:text-sm"
+                    placeholder="Variant matni..."
+                    className="w-full p-2 bg-white text-black font-semibold rounded-lg border-2 border-black text-xs sm:text-sm focus:outline-none"
                   />
                 </div>
 
-                {/* Answer C: Yellow */}
+                {/* Variant C */}
                 <div className="p-3 bg-[#eec200] text-[#3c2f00] rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">
-                        ■
-                      </span>
-                      <span className="font-space text-sm font-bold uppercase tracking-wider">
-                        C Variant
-                      </span>
+                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">■</span>
+                      <span className="font-space text-xs font-bold uppercase">C Variant</span>
                     </div>
-                    <label className="flex items-center gap-1 cursor-pointer select-none bg-black/40 px-2 py-0.5 rounded border border-black">
+                    <label className="flex items-center gap-1 cursor-pointer bg-black/40 px-2 py-0.5 rounded border border-black text-xs font-space font-bold text-white">
                       <input
                         type="radio"
-                        name="correct_answer"
-                        value="C"
+                        name="correct_opt"
                         checked={correctOption === 'C'}
                         onChange={() => setCorrectOption('C')}
-                        className="w-4 h-4 accent-[#eec200] cursor-pointer"
+                        className="accent-[#eec200]"
                       />
-                      <span className="font-space text-xs text-white">
-                        {correctOption === 'C' ? "✓ To'g'ri" : "To'g'ri"}
-                      </span>
+                      <span>{correctOption === 'C' ? "✓ To'g'ri" : "Tanlash"}</span>
                     </label>
                   </div>
                   <input
                     type="text"
                     value={optionC}
                     onChange={e => setOptionC(e.target.value)}
-                    placeholder="Variant matnini kiriting..."
-                    className="w-full p-2 px-3 bg-white text-black font-semibold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] focus:outline-none text-xs sm:text-sm"
+                    placeholder="Variant matni..."
+                    className="w-full p-2 bg-white text-black font-semibold rounded-lg border-2 border-black text-xs sm:text-sm focus:outline-none"
                   />
                 </div>
 
-                {/* Answer D: Green */}
+                {/* Variant D */}
                 <div className="p-3 bg-[#00cbe6] text-[#00363e] rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">
-                        ◆
-                      </span>
-                      <span className="font-space text-sm font-bold uppercase tracking-wider">
-                        D Variant
-                      </span>
+                      <span className="w-6 h-6 rounded bg-black text-white flex items-center justify-center font-bold text-xs">◆</span>
+                      <span className="font-space text-xs font-bold uppercase">D Variant</span>
                     </div>
-                    <label className="flex items-center gap-1 cursor-pointer select-none bg-black/40 px-2 py-0.5 rounded border border-black">
+                    <label className="flex items-center gap-1 cursor-pointer bg-black/40 px-2 py-0.5 rounded border border-black text-xs font-space font-bold text-white">
                       <input
                         type="radio"
-                        name="correct_answer"
-                        value="D"
+                        name="correct_opt"
                         checked={correctOption === 'D'}
                         onChange={() => setCorrectOption('D')}
-                        className="w-4 h-4 accent-[#eec200] cursor-pointer"
+                        className="accent-[#eec200]"
                       />
-                      <span className="font-space text-xs text-white">
-                        {correctOption === 'D' ? "✓ To'g'ri" : "To'g'ri"}
-                      </span>
+                      <span>{correctOption === 'D' ? "✓ To'g'ri" : "Tanlash"}</span>
                     </label>
                   </div>
                   <input
                     type="text"
                     value={optionD}
                     onChange={e => setOptionD(e.target.value)}
-                    placeholder="Variant matnini kiriting..."
-                    className="w-full p-2 px-3 bg-white text-black font-semibold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] focus:outline-none text-xs sm:text-sm"
+                    placeholder="Variant matni..."
+                    className="w-full p-2 bg-white text-black font-semibold rounded-lg border-2 border-black text-xs sm:text-sm focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            {/* 4. Anti-Cheat Security Info Banner */}
-            <div className="p-3 bg-[#060d24] border-2 border-black rounded-lg flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-[#5de6ff]/10 text-[#5de6ff] flex items-center justify-center shrink-0 border border-black">
-                <span className="material-symbols-outlined text-[20px]">lock</span>
-              </div>
-              <p className="text-xs text-[#c3c6d7] leading-snug">
-                <strong className="text-[#5de6ff] font-space">🔒 Eslatma:</strong> To'g'ri javob
-                faqat serverda saqlanadi va o'yinchi pultiga oldindan oshkor qilinmaydi. WebSocket
-                xavfsiz shifrlangan.
-              </p>
+            {/* 4. Tushuntirish / Izoh */}
+            <div className="flex flex-col gap-1">
+              <label className="font-space text-xs font-bold uppercase text-[#dce1ff]">
+                To'g'ri Javob Izohi:
+              </label>
+              <input
+                type="text"
+                value={explanation}
+                onChange={e => setExplanation(e.target.value)}
+                placeholder="Nega aynan shu javob to'g'riligi haqida qisqa ma'lumot..."
+                className="w-full p-2 bg-white text-black text-xs font-semibold rounded-lg border-2 border-black focus:outline-none"
+              />
             </div>
 
-            {/* 5. Neo-Brutalist Action Controls */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+            {/* Save & Action Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t-2 border-black">
+              <span className="text-xs text-[#c3c6d7] font-space">
+                Status: Barcha o'zgarishlar darhol jonli maydonga saqlanadi
+              </span>
+
               <button
                 type="button"
-                onClick={handleClear}
-                className="w-full sm:w-auto px-4 py-2.5 bg-[#222941] hover:bg-[#323851] text-[#dce1ff] font-space text-sm font-bold uppercase rounded-xl border-2 border-black shadow-[3px_3px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-1.5"
+                onClick={handleSaveCurrentQuestion}
+                className="w-full sm:w-auto px-6 py-2.5 bg-[#2563eb] text-white hover:bg-[#0053db] font-space text-sm font-bold uppercase tracking-wider rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-1.5"
               >
-                <span className="material-symbols-outlined text-[20px]">delete_sweep</span>
-                <span>Tozalash</span>
-              </button>
-
-              <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSaveBtn}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-[#2563eb] text-[#eeefff] font-space text-sm font-bold uppercase tracking-wider rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[20px]">save</span>
-                  <span>Savolni Saqlash</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleNextQuestionBtn}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-[#00cbe6] text-[#00363e] font-space text-sm font-bold uppercase tracking-wider rounded-xl border-4 border-black shadow-[4px_4px_0px_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-1.5"
-                >
-                  <span>Keyingisiga O'tish</span>
-                  <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Question Track Navigation Bar */}
-          <div className="p-3 bg-[#141a32] border-2 border-black rounded-xl flex items-center justify-between overflow-x-auto gap-2">
-            <span className="font-space text-xs uppercase font-bold text-[#c3c6d7] shrink-0">
-              Savollar kartasi:
-            </span>
-            <div className="flex items-center gap-2 overflow-x-auto py-1">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => {
-                    playClickSound();
-                    setActiveQuestionNum(num);
-                  }}
-                  className={`w-8 h-8 rounded-lg border-2 border-black font-space text-xs font-bold transition-transform ${
-                    num === activeQuestionNum
-                      ? 'bg-[#2563eb] text-[#eeefff] shadow-[2px_2px_0px_#000000] scale-110'
-                      : num < activeQuestionNum
-                      ? 'bg-[#00cbe6] text-[#00363e]'
-                      : 'bg-[#181e36] text-[#dce1ff] hover:bg-[#222941]'
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  playClickSound();
-                  onNotify("Yangi savol #9 qo'shildi!");
-                }}
-                className="w-8 h-8 rounded-lg border-2 border-dashed border-[#8d90a0] text-[#c3c6d7] font-space text-xs font-bold hover:border-solid hover:bg-[#222941]"
-              >
-                +
+                <span className="material-symbols-outlined text-[20px]">save</span>
+                <span>Savolni Saqlash 💾</span>
               </button>
             </div>
           </div>

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { AVATAR_OPTIONS } from '../data/mockQuizData';
+import { CHARACTER_AVATARS, CharacterAvatar, getAvatarFallbackUrl } from '../data/avatarsData';
+import { Question } from '../types/quiz';
 import {
   playClickSound,
   playCorrectSound,
+  playWrongSound,
   playPowerUpSound,
   playReactionSound,
   playTickSound
@@ -12,36 +14,56 @@ import {
 interface PlayerViewProps {
   onSendReaction: (emoji: string, label: string) => void;
   onNotify: (msg: string) => void;
-  roomPin?: string;
+  roomPin: string;
+  activeQuestion?: Question;
+  onPlayerProfileUpdate?: (name: string, avatarUrl: string) => void;
 }
 
 export const PlayerView: React.FC<PlayerViewProps> = ({
   onSendReaction,
   onNotify,
-  roomPin = '749201'
+  roomPin,
+  activeQuestion,
+  onPlayerProfileUpdate
 }) => {
   // Mode switcher: 'lobby' (PIN & Ro'yxat) vs 'ingame' (O'yinchi Pulti Jonli)
   const [subView, setSubView] = useState<'lobby' | 'ingame'>('lobby');
 
   // PIN inputs
-  const [pin, setPin] = useState<string[]>(['7', '4', '9', '2', '0', '1']);
+  const cleanRoomPin = roomPin.replace(/\s+/g, '');
+  const [pinDigits, setPinDigits] = useState<string[]>(['7', '4', '9', '2', '0', '1']);
   const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [pinError, setPinError] = useState<string | null>(null);
 
   // Nickname
   const [nickname, setNickname] = useState('CyberSardor');
 
-  // Avatar Selection
-  const [selectedAvatarIdx, setSelectedAvatarIdx] = useState(0);
+  // 40 Character Avatars selection
+  const [avatarCategory, setAvatarCategory] = useState<'all' | 'Marvel' | 'DC' | 'Animatsiya & O\'yinlar'>('all');
+  const [selectedAvatarId, setSelectedAvatarId] = useState<string>('iron-man');
 
   // In-Game state
   const [score, setScore] = useState(3450);
   const [streak, setStreak] = useState(3);
   const [timeLeft, setTimeLeft] = useState(14);
   const [selectedAnswer, setSelectedAnswer] = useState<'red' | 'blue' | 'yellow' | 'green' | null>(null);
+  const [answerResult, setAnswerResult] = useState<'correct' | 'wrong' | null>(null);
+  const [scoreDelta, setScoreDelta] = useState<number>(0);
   const [powerUp2xUsed, setPowerUp2xUsed] = useState(false);
   const [powerUp5050Used, setPowerUp5050Used] = useState(false);
   const [eliminatedOptions, setEliminatedOptions] = useState<string[]>([]);
   const [answerTime, setAnswerTime] = useState<string | null>(null);
+
+  // Dynamic Mood Emojis: 'neutral' | 'win' | 'loss'
+  const [playerMood, setPlayerMood] = useState<'neutral' | 'win' | 'loss'>('neutral');
+
+  // Find selected avatar object
+  const currentAvatar = CHARACTER_AVATARS.find(a => a.id === selectedAvatarId) || CHARACTER_AVATARS[0];
+
+  // Inform parent about player profile
+  useEffect(() => {
+    onPlayerProfileUpdate?.(nickname, currentAvatar.imageUrl);
+  }, [nickname, currentAvatar, onPlayerProfileUpdate]);
 
   // Timer countdown simulation
   useEffect(() => {
@@ -49,9 +71,9 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     const interval = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
-          return 20; // Loop timer for interactive demo
+          return 20; // reset loop for interactive controller
         }
-        if (prev <= 6) {
+        if (prev <= 5) {
           playTickSound(true);
         }
         return prev - 1;
@@ -60,14 +82,15 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     return () => clearInterval(interval);
   }, [subView]);
 
-  // Handle PIN input chaining
+  // PIN chaining input handler
   const handlePinChange = (idx: number, val: string) => {
     const char = val.slice(-1);
     if (!/^[0-9]?$/.test(char)) return;
 
-    const nextPin = [...pin];
+    setPinError(null);
+    const nextPin = [...pinDigits];
     nextPin[idx] = char;
-    setPin(nextPin);
+    setPinDigits(nextPin);
 
     if (char && idx < 5) {
       pinInputRefs.current[idx + 1]?.focus();
@@ -75,50 +98,102 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
   };
 
   const handlePinKeyDown = (idx: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !pin[idx] && idx > 0) {
+    if (e.key === 'Backspace' && !pinDigits[idx] && idx > 0) {
       pinInputRefs.current[idx - 1]?.focus();
     }
   };
 
-  const handleRandomAvatar = () => {
-    playClickSound();
-    const rand = Math.floor(Math.random() * AVATAR_OPTIONS.length);
-    setSelectedAvatarIdx(rand);
-  };
-
+  // Join Game validation - STRICT PIN VALIDATION according to Requirement 3
   const handleJoinGame = () => {
+    const enteredPin = pinDigits.join('');
+    if (enteredPin.length < 6) {
+      playWrongSound();
+      setPinError("Iltimos, to'liq 6 xonali o'yin PIN kodini kiriting!");
+      onNotify("PIN to'liq kiritilmadi! 6 xonali kod kerak.");
+      return;
+    }
+
+    if (enteredPin !== cleanRoomPin) {
+      playWrongSound();
+      setPinError("Bunday o'yin mavjud emas! PIN kodni qayta tekshiring.");
+      onNotify("Bunday o'yin mavjud emas! PIN kodni qayta tekshiring ❌");
+      return;
+    }
+
+    // Success
+    setPinError(null);
     playPowerUpSound();
     confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.7 }
+      particleCount: 60,
+      spread: 70,
+      origin: { y: 0.6 }
     });
     setSubView('ingame');
-    onNotify("Arenaga muvaffaqiyatli qo'shildingiz! Jang boshlandi 🚀");
+    onNotify(`Arenaga xush kelibsiz, ${nickname}! O'yin pulti faollashtirildi 🚀`);
   };
 
-  // Submit Answer
+  // Select Random Avatar
+  const handleRandomAvatar = () => {
+    playClickSound();
+    const randomIndex = Math.floor(Math.random() * CHARACTER_AVATARS.length);
+    setSelectedAvatarId(CHARACTER_AVATARS[randomIndex].id);
+  };
+
+  // Submit Answer with FAIR SCORING:
+  // - Correct: +Points + Speed Bonus
+  // - Wrong: STRICTLY SUBTRACT -50 points, streak = 0, crying emojis!
   const handleSelectAnswer = (choice: 'red' | 'blue' | 'yellow' | 'green') => {
     if (eliminatedOptions.includes(choice)) return;
-    playCorrectSound();
+
+    // Map choice color to option letter
+    const colorToLetterMap: Record<string, 'A' | 'B' | 'C' | 'D'> = {
+      red: 'A',
+      blue: 'B',
+      yellow: 'C',
+      green: 'D'
+    };
+    const chosenLetter = colorToLetterMap[choice];
+    const correctLetter = activeQuestion?.correctOption || 'B';
+
     setSelectedAnswer(choice);
-    const recordedTime = (Math.random() * 0.8 + 0.8).toFixed(2);
+    const recordedTime = (Math.random() * 0.7 + 0.9).toFixed(2);
     setAnswerTime(recordedTime);
 
-    // Multiplier calculation
-    const basePts = powerUp2xUsed ? 2000 : 1000;
-    const speedBonus = 940;
-    const earned = basePts + speedBonus;
-    setScore(prev => prev + earned);
-    setStreak(prev => prev + 1);
+    if (chosenLetter === correctLetter) {
+      // Correct answer!
+      playCorrectSound();
+      confetti({ particleCount: 35, spread: 50, origin: { y: 0.7 } });
+      const basePts = powerUp2xUsed ? 2000 : (activeQuestion?.points || 1000);
+      const speedBonus = Math.floor(Number(timeLeft) * 35);
+      const totalEarned = basePts + speedBonus;
 
-    onNotify(`${choice.toUpperCase()} javobi serverga jo'natildi (+${earned} ball) ⚡`);
+      setScore(prev => prev + totalEarned);
+      setStreak(prev => prev + 1);
+      setScoreDelta(totalEarned);
+      setAnswerResult('correct');
+      setPlayerMood('win');
+
+      onNotify(`To'g'ri javob! +${totalEarned} ball qo'shildi 🔥`);
+    } else {
+      // WRONG ANSWER - STRICT PENALTY (Ayirish!)
+      playWrongSound();
+      const penalty = 50; // deduct points
+      setScore(prev => Math.max(0, prev - penalty));
+      setStreak(0); // reset streak
+      setScoreDelta(-penalty);
+      setAnswerResult('wrong');
+      setPlayerMood('loss');
+
+      onNotify(`Noto'g'ri javob! -${penalty} ball jarima berildi 😭`);
+    }
   };
 
   const handleResetAnswer = () => {
     playClickSound();
     setSelectedAnswer(null);
+    setAnswerResult(null);
     setAnswerTime(null);
+    setPlayerMood('neutral');
   };
 
   // Power-up 2x
@@ -126,7 +201,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     if (powerUp2xUsed) return;
     playPowerUpSound();
     setPowerUp2xUsed(true);
-    onNotify('2X BALL KOZIRI FAOLLASHTIRILDI! Ushbu savolda 2 barobar ochko ⚡');
+    onNotify('2X BALL KOZIRI FAOLLASHTIRILDI! Keyingi to\'g\'ri javobda 2 barobar ochko ⚡');
   };
 
   // Power-up 50/50
@@ -134,9 +209,8 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     if (powerUp5050Used) return;
     playPowerUpSound();
     setPowerUp5050Used(true);
-    // Eliminate 2 wrong choices (say red and yellow)
     setEliminatedOptions(['red', 'yellow']);
-    onNotify("50/50 KOZIRI FAOLLASHTIRILDI! 2 ta noto'g'ri variant o'chirildi 🎯");
+    onNotify("50/50 KOZIRI FAOLLASHTIRILDI! 2 ta xato variant o'chirildi 🎯");
   };
 
   // Send Floating Reaction
@@ -146,22 +220,15 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     onNotify(`Reaksiya yuborildi: ${emoji} ${label}`);
   };
 
-  // Launch celebration confetti on podium click
-  const triggerPodiumConfetti = () => {
-    playPowerUpSound();
-    confetti({
-      particleCount: 90,
-      spread: 100,
-      origin: { y: 0.6 }
-    });
-    onNotify("3D Poydevor: Chempionlar tantanasi olqishlanmoqda! 🎊");
-  };
-
-  const fullPinString = pin.join('');
+  // Filtered Avatars
+  const filteredAvatars = CHARACTER_AVATARS.filter(a => {
+    if (avatarCategory === 'all') return true;
+    return a.universe === avatarCategory;
+  });
 
   return (
     <div className="flex flex-col w-full pb-10">
-      {/* Mode Switcher & Arena Broadcast Status Banner */}
+      {/* Dynamic Arena Broadcast Status Bar */}
       <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4 py-2.5 mb-6 bg-[#141a32] rounded-xl px-4 border-2 border-black shadow-[4px_4px_0px_#000000]">
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-[#5de6ff] animate-ping" />
@@ -175,7 +242,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
           </span>
         </div>
 
-        {/* State View Toggle */}
+        {/* State View Toggle (Lobby vs Ingame) */}
         <div className="flex items-center bg-[#060d24] p-1 rounded-lg gap-1 border border-black">
           <button
             onClick={() => {
@@ -210,17 +277,13 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
 
       {/* Main Dual Workspace Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT / TAB 1: Game Onboarding & PIN Entry Chamber */}
+        {/* LEFT / TAB 1: Game Onboarding & 40 Character Avatars */}
         <section
           className={`lg:col-span-6 w-full flex flex-col gap-4 transition-all duration-300 ${
-            subView === 'lobby' ? 'opacity-100' : 'opacity-90'
+            subView === 'lobby' ? 'opacity-100' : 'opacity-85'
           }`}
         >
           <div className="relative bg-[#181e36] rounded-xl p-6 border-4 border-black shadow-[6px_6px_0px_#000000] overflow-hidden">
-            {/* Neon Ambient Accents */}
-            <div className="absolute -top-12 -right-12 w-44 h-44 bg-[#5de6ff]/15 rounded-full blur-2xl pointer-events-none" />
-            <div className="absolute -bottom-10 -left-10 w-44 h-44 bg-[#2563eb]/20 rounded-full blur-3xl pointer-events-none" />
-
             {/* Header Card Deck */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col">
@@ -237,21 +300,21 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               </span>
             </div>
 
-            <p className="text-sm text-[#c3c6d7] mb-6">
-              Proyektor ekranidagi 6 xonali o'yin kodini tering, o'zingizga xos jangovar taxallus va pixel qahramon tanlang!
+            <p className="text-xs sm:text-sm text-[#c3c6d7] mb-5">
+              Proyektor ekranidagi 6 xonali o'yin kodini tering, o'zingizga xos jangovar taxallus va 40 ta realistik Marvel, DC yoki multfilm qahramonidan birini tanlang!
             </p>
 
-            {/* 6-Digit Game PIN Input Cells */}
-            <div className="flex flex-col gap-1 mb-5">
+            {/* 6-Digit Game PIN Input Cells with Error Warning */}
+            <div className="flex flex-col gap-1.5 mb-5">
               <label className="font-space text-xs font-bold text-[#dce1ff] uppercase flex justify-between items-center">
                 <span>O'yin PIN Kodi (6 Xonali)</span>
                 <span className="text-[#5de6ff] text-xs font-mono font-medium">
-                  {fullPinString.length === 6 ? `PIN Kiritildi: ${fullPinString}` : `${fullPinString.length}/6 kiritildi`}
+                  Masofaviy PIN: <strong className="text-[#eec200]">{cleanRoomPin}</strong>
                 </span>
               </label>
 
               <div className="grid grid-cols-6 gap-2 sm:gap-3">
-                {pin.map((digit, idx) => (
+                {pinDigits.map((digit, idx) => (
                   <input
                     key={idx}
                     ref={el => {
@@ -263,18 +326,20 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     value={digit}
                     onChange={e => handlePinChange(idx, e.target.value)}
                     onKeyDown={e => handlePinKeyDown(idx, e)}
-                    className="w-full aspect-square text-center font-space text-2xl sm:text-3xl font-bold bg-[#060d24] text-[#5de6ff] rounded-lg border-2 border-black shadow-[3px_3px_0px_#000000] focus:bg-[#222941] focus:border-[#5de6ff] focus:outline-none transition-transform"
+                    className={`w-full aspect-square text-center font-space text-2xl sm:text-3xl font-bold bg-[#060d24] text-[#5de6ff] rounded-lg border-2 ${
+                      pinError ? 'border-[#ffb4ab]' : 'border-black'
+                    } shadow-[3px_3px_0px_#000000] focus:bg-[#222941] focus:border-[#5de6ff] focus:outline-none transition-transform`}
                   />
                 ))}
               </div>
 
-              <div className="flex items-center gap-1.5 mt-1.5 text-[#c3c6d7] text-xs">
-                <span className="material-symbols-outlined text-[16px] text-[#5de6ff]">info</span>
-                <span>
-                  Maslahat: Ekranda ko'rsatilgan masofaviy PIN:{' '}
-                  <strong className="text-[#eec200] font-space">{roomPin}</strong>
-                </span>
-              </div>
+              {/* Strict PIN Error Banner according to Requirement 3 */}
+              {pinError && (
+                <div className="mt-2 p-3 bg-[#93000a] text-[#ffdad6] border-2 border-black rounded-lg flex items-center gap-2 font-space text-xs font-bold shadow-[2px_2px_0px_#000000] animate-shake">
+                  <span className="material-symbols-outlined text-[18px]">error</span>
+                  <span>{pinError}</span>
+                </div>
+              )}
             </div>
 
             {/* Nickname Input Chamber */}
@@ -297,7 +362,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                   value={nickname}
                   onChange={e => setNickname(e.target.value)}
                   placeholder="Masalan: HumoyunBlade"
-                  className="w-full pl-9 pr-14 py-2.5 bg-[#060d24] text-[#dce1ff] rounded-lg font-space text-base font-bold border-2 border-black shadow-[3px_3px_0px_#000000] focus:bg-[#222941] focus:border-[#5de6ff] focus:outline-none transition-colors"
+                  className="w-full pl-9 pr-14 py-2.5 bg-[#060d24] text-[#dce1ff] rounded-lg font-space text-base font-bold border-2 border-black shadow-[3px_3px_0px_#000000] focus:bg-[#222941] focus:border-[#5de6ff] focus:outline-none"
                 />
                 <span className="absolute right-3 font-space text-xs text-[#c3c6d7]">
                   {nickname.length}/16
@@ -305,54 +370,115 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               </div>
             </div>
 
-            {/* Pixel Boshlar Karuseli */}
+            {/* 40 TA REALISTIK AVATAR TANLASH (Requirement 3: Marvel, DC va multfilmlar) */}
             <div className="flex flex-col gap-2 mb-6 bg-[#141a32] p-4 rounded-xl border-2 border-black shadow-[3px_3px_0px_#000000]">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[#eec200] text-[20px]">face</span>
+                  <span className="material-symbols-outlined text-[#eec200] text-[20px]">photo_camera_front</span>
                   <span className="font-space text-xs font-bold text-[#dce1ff] uppercase tracking-wider">
-                    Pixel Boshlar Karuseli
+                    40 ta Realistik Avatar (Marvel, DC, Multfilmlar)
                   </span>
                 </div>
+
                 <button
                   type="button"
                   onClick={handleRandomAvatar}
-                  className="px-2.5 py-1 bg-[#222941] hover:bg-[#323851] text-[#eec200] rounded flex items-center gap-1 font-space text-xs font-bold transition-all border border-black shadow-sm active:scale-95"
+                  className="px-2.5 py-1 bg-[#222941] hover:bg-[#323851] text-[#eec200] rounded-lg flex items-center gap-1 font-space text-xs font-bold transition-all border border-black shadow-sm self-start sm:self-auto"
                 >
-                  <span>🎲 Tasodifiy bosh</span>
+                  <span>🎲 Tasodifiy personaj</span>
                 </button>
               </div>
 
-              {/* Avatar Gallery */}
-              <div className="grid grid-cols-5 gap-2 sm:gap-3 mt-1">
-                {AVATAR_OPTIONS.map((item, idx) => {
-                  const isSelected = idx === selectedAvatarIdx;
+              {/* Universe filter tabs */}
+              <div className="flex items-center gap-1 bg-[#060d24] p-1 rounded-lg border border-black text-xs font-space font-bold overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setAvatarCategory('all')}
+                  className={`px-2.5 py-1 rounded shrink-0 ${avatarCategory === 'all' ? 'bg-[#2563eb] text-white' : 'text-[#c3c6d7]'}`}
+                >
+                  Barchasi (40)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvatarCategory('Marvel')}
+                  className={`px-2.5 py-1 rounded shrink-0 ${avatarCategory === 'Marvel' ? 'bg-[#ef4444] text-white' : 'text-[#c3c6d7]'}`}
+                >
+                  Marvel (15)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvatarCategory('DC')}
+                  className={`px-2.5 py-1 rounded shrink-0 ${avatarCategory === 'DC' ? 'bg-[#3b82f6] text-white' : 'text-[#c3c6d7]'}`}
+                >
+                  DC (9)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvatarCategory('Animatsiya & O\'yinlar')}
+                  className={`px-2.5 py-1 rounded shrink-0 ${avatarCategory === 'Animatsiya & O\'yinlar' ? 'bg-[#10b981] text-white' : 'text-[#c3c6d7]'}`}
+                >
+                  Multfilm & O'yinlar (16)
+                </button>
+              </div>
+
+              {/* Selected Character Preview Badge */}
+              <div className="flex items-center gap-3 p-2 bg-[#060d24] rounded-lg border border-[#5de6ff]/30">
+                <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-[#eec200] shrink-0 bg-[#222941]">
+                  <img
+                    src={currentAvatar.imageUrl}
+                    alt={currentAvatar.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = getAvatarFallbackUrl(currentAvatar.name);
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-space text-sm font-bold text-[#eec200]">
+                    {currentAvatar.name}
+                  </span>
+                  <span className="text-[11px] text-[#5de6ff] font-space">
+                    {currentAvatar.universe} koinoti
+                  </span>
+                </div>
+              </div>
+
+              {/* Scrollable Avatar Grid (40 high quality characters) */}
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-[220px] overflow-y-auto p-1 pr-1.5 border border-black rounded-lg bg-[#060d24]">
+                {filteredAvatars.map(char => {
+                  const isSelected = char.id === selectedAvatarId;
                   return (
                     <button
-                      key={item.id}
+                      key={char.id}
                       type="button"
                       onClick={() => {
                         playClickSound();
-                        setSelectedAvatarIdx(idx);
+                        setSelectedAvatarId(char.id);
                       }}
-                      className={`relative aspect-square p-2 rounded-xl flex flex-col items-center justify-center transition-all border-2 border-black ${
+                      className={`relative aspect-square rounded-xl p-1 flex flex-col items-center justify-center transition-all border-2 ${
                         isSelected
-                          ? 'bg-[#2563eb] shadow-[3px_3px_0px_#000000] scale-105'
-                          : 'bg-[#060d24] hover:bg-[#222941]'
+                          ? 'border-[#eec200] bg-[#222941] shadow-[0_0_12px_#eec200] scale-105 z-10'
+                          : 'border-black bg-[#181e36] hover:border-[#5de6ff]'
                       }`}
+                      title={char.name}
                     >
-                      <div className="w-10 h-10 rounded-lg bg-[#222941] flex items-center justify-center text-2xl select-none">
-                        {item.emoji}
+                      <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-black/60 flex items-center justify-center">
+                        <img
+                          src={char.imageUrl}
+                          alt={char.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = getAvatarFallbackUrl(char.name);
+                          }}
+                        />
                       </div>
-                      <span
-                        className={`font-space text-[10px] mt-1 uppercase tracking-tight font-bold ${
-                          isSelected ? 'text-[#eeefff]' : 'text-[#c3c6d7]'
-                        }`}
-                      >
-                        {item.name}
+                      <span className="font-space text-[9px] font-bold text-[#dce1ff] truncate w-full text-center mt-1 leading-tight">
+                        {char.name.split(' ')[0]}
                       </span>
+
                       {isSelected && (
-                        <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#eec200] text-[#3c2f00] rounded-full flex items-center justify-center text-[11px] font-bold border border-black shadow">
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-[#eec200] text-[#3c2f00] rounded-full flex items-center justify-center text-[10px] font-bold border border-black shadow">
                           ✓
                         </div>
                       )}
@@ -362,7 +488,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               </div>
             </div>
 
-            {/* High-Contrast Action Button */}
+            {/* Action Join Button */}
             <button
               type="button"
               onClick={handleJoinGame}
@@ -372,18 +498,9 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               <span className="text-2xl">🚀</span>
             </button>
           </div>
-
-          {/* Quick Session Footnote */}
-          <div className="bg-[#141a32] p-4 rounded-xl flex items-center justify-between text-[#c3c6d7] border-2 border-black shadow-[3px_3px_0px_#000000]">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#5de6ff] text-[18px]">vpn_key</span>
-              <span className="font-space text-xs font-bold">Sessiya saqlangan (Token: #HQ-9821)</span>
-            </div>
-            <span className="text-xs text-[#5de6ff] font-space font-medium">Tayyor holat</span>
-          </div>
         </section>
 
-        {/* RIGHT / TAB 2: Active In-Game Mobile & Arena Controller Chamber */}
+        {/* RIGHT / TAB 2: Active In-Game Arena Controller Chamber */}
         <section
           className={`lg:col-span-6 w-full flex flex-col gap-4 transition-all duration-300 ${
             subView === 'ingame' ? 'opacity-100' : 'opacity-90'
@@ -394,34 +511,70 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
             {/* Upper Row: Question Tracker & Reconnect Badge */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-[#2563eb] text-[#eeefff] font-space text-xs font-bold rounded border border-black shadow-sm">
+                <span className="px-3 py-1 bg-[#2563eb] text-[#eeefff] font-space text-xs font-bold rounded-lg border border-black shadow-sm">
                   SAVOL 04 / 10
                 </span>
-                <span className="px-2.5 py-1 bg-[#222941] text-[#5de6ff] font-space text-xs font-bold rounded border border-black hidden sm:inline">
-                  Oddiy bosqich
+                <span className="px-2.5 py-1 bg-[#222941] text-[#5de6ff] font-space text-xs font-bold rounded-lg border border-black hidden sm:inline">
+                  {activeQuestion?.category || 'Dasturlash'}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-[#060d24] rounded-lg text-[#5de6ff] font-space text-xs font-bold border border-black">
-                <span className="w-2 h-2 rounded-full bg-[#5de6ff] animate-pulse" />
-                <span>#HQ-9821</span>
+
+              {/* Dynamic Mood & Streak Indicator */}
+              <div className="flex items-center gap-2">
+                {playerMood === 'win' && (
+                  <span className="px-2 py-0.5 bg-[#eec200] text-[#3c2f00] font-space text-xs font-bold rounded-lg border border-black flex items-center gap-1 animate-bounce">
+                    <span>🔥👑⚡️</span>
+                    <span>G'alaba!</span>
+                  </span>
+                )}
+                {playerMood === 'loss' && (
+                  <span className="px-2 py-0.5 bg-[#93000a] text-[#ffdad6] font-space text-xs font-bold rounded-lg border border-black flex items-center gap-1 animate-shake">
+                    <span>😭🤦‍♂️💔</span>
+                    <span>Xato!</span>
+                  </span>
+                )}
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#060d24] rounded-lg text-[#5de6ff] font-space text-xs font-bold border border-black">
+                  <span className="w-2 h-2 rounded-full bg-[#5de6ff] animate-pulse" />
+                  <span>#{cleanRoomPin}</span>
+                </div>
               </div>
             </div>
 
-            {/* Middle Row: Score + Streak & Circular Countdown */}
+            {/* Score & Multiplier Block + Countdown */}
             <div className="grid grid-cols-12 gap-3 items-center bg-[#141a32] p-4 rounded-xl border-2 border-black shadow-[3px_3px_0px_#000000]">
               <div className="col-span-8 flex flex-col justify-center">
                 <div className="flex items-center gap-2">
-                  <span className="text-[#eec200] text-2xl select-none">🔥</span>
+                  <span className="text-[#eec200] text-2xl select-none">
+                    {playerMood === 'win' ? '👑' : playerMood === 'loss' ? '💔' : '🔥'}
+                  </span>
                   <span className="font-space text-2xl sm:text-3xl font-bold text-[#dce1ff]">
                     {score.toLocaleString()}
                   </span>
                   <span className="font-space text-sm font-bold text-[#5de6ff]">Ball</span>
+
+                  {/* Score Delta Badge */}
+                  {scoreDelta !== 0 && (
+                    <span
+                      className={`px-2 py-0.5 rounded font-space text-xs font-bold ${
+                        scoreDelta > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                      }`}
+                    >
+                      {scoreDelta > 0 ? `+${scoreDelta}` : scoreDelta}
+                    </span>
+                  )}
                 </div>
+
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="px-2 py-0.5 bg-[#cea700] text-[#3c2f00] font-space text-[10px] rounded uppercase font-bold border border-black">
-                    {streak}x Streak!
+                  <span
+                    className={`px-2 py-0.5 rounded font-space text-[10px] uppercase font-bold border border-black ${
+                      streak > 0 ? 'bg-[#cea700] text-[#3c2f00]' : 'bg-[#222941] text-[#c3c6d7]'
+                    }`}
+                  >
+                    {streak > 0 ? `${streak}x Streak!` : "Streak 0"}
                   </span>
-                  <span className="text-xs text-[#c3c6d7]">To'g'ri javoblar zanjiri</span>
+                  <span className="text-xs text-[#c3c6d7]">
+                    {streak > 0 ? "To'g'ri javoblar zanjiri" : "Xato javob sababli to'xtadi"}
+                  </span>
                 </div>
               </div>
 
@@ -429,14 +582,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               <div className="col-span-4 flex items-center justify-end">
                 <div className="relative w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center">
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="transparent"
-                      stroke="#2d344c"
-                      strokeWidth="10"
-                    />
+                    <circle cx="50" cy="50" r="42" fill="transparent" stroke="#2d344c" strokeWidth="10" />
                     <circle
                       cx="50"
                       cy="50"
@@ -466,29 +612,38 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               </div>
             </div>
 
-            {/* 3X STREAK MULTIPLIER BANNER */}
-            <div className="p-3 bg-gradient-to-r from-[#cea700]/30 to-[#222941] border-2 border-[#eec200] rounded-xl flex items-center justify-between shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#eec200] text-[#3c2f00] flex items-center justify-center text-xl font-bold shadow border border-black">
-                  🔥
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-space text-xs font-bold text-[#eec200] tracking-wide uppercase flex items-center gap-1.5">
-                    3X STREAK MULTIPLIER!
-                    <span className="text-[9px] bg-[#eec200] text-[#3c2f00] px-1.5 py-0.5 rounded font-space font-bold">
-                      AKTIV
+            {/* Dynamic Mood Card (Adolatli Ball va Dinamik Kayfiyat) */}
+            {playerMood === 'win' && (
+              <div className="p-3 bg-emerald-950/70 border-2 border-emerald-400 rounded-xl flex items-center justify-between shadow-lg animate-pulse">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">🔥👑⚡️</span>
+                  <div className="flex flex-col">
+                    <span className="font-space text-sm font-bold text-emerald-300">
+                      G'alaba Qozondingiz! +{scoreDelta} Ball
                     </span>
-                  </span>
-                  <span className="text-xs text-[#c3c6d7]">
-                    Ketma-ket 3 ta to'g'ri javob: Keyingi savolda{' '}
-                    <strong className="text-[#5de6ff]">+300 Bonus Ball</strong> beriladi!
-                  </span>
+                    <span className="text-xs text-[#c3c6d7]">
+                      Tezlik bonusi bilan to'liq hisoblandi! Davom eting!
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-[#060d24] rounded-lg text-[#eec200] font-space text-xs font-bold border border-[#eec200]/40">
-                <span>⚡️ KOMBO x3</span>
+            )}
+
+            {playerMood === 'loss' && (
+              <div className="p-3 bg-rose-950/70 border-2 border-rose-500 rounded-xl flex items-center justify-between shadow-lg animate-shake">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">😭🤦‍♂️💔</span>
+                  <div className="flex flex-col">
+                    <span className="font-space text-sm font-bold text-rose-300">
+                      Afsus, Noto'g'ri Javob! {scoreDelta} Ball
+                    </span>
+                    <span className="text-xs text-[#c3c6d7]">
+                      Xato javob uchun balldan ayirildi. Keyingi savolda diqqat qiling!
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Blind Prompt Notice */}
             <div className="bg-[#2d344c]/60 p-2.5 rounded-lg flex items-center justify-between text-[#c3c6d7] border border-black">
@@ -525,25 +680,17 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     : 'bg-[#141a32] hover:bg-[#eec200]/10 border-[#eec200] active:scale-95'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#eec200] text-[#3c2f00] flex items-center justify-center font-bold text-base shadow border border-black">
-                    ⚡️
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⚡️</span>
                   <div className="flex flex-col text-left">
-                    <span className="font-space text-sm font-bold text-[#eec200] leading-tight">
-                      2x Ball
-                    </span>
+                    <span className="font-space text-xs font-bold text-[#eec200] leading-tight">2x Ball</span>
                     <span className="text-[10px] text-[#c3c6d7] uppercase font-space">
-                      {powerUp2xUsed ? 'ISHLATILDI' : '1 ta imkoniyat'}
+                      {powerUp2xUsed ? 'ISHLATILDI' : '1 marta'}
                     </span>
                   </div>
                 </div>
-                <span
-                  className={`px-2 py-0.5 rounded font-space text-[10px] uppercase font-bold border border-black ${
-                    powerUp2xUsed ? 'bg-gray-700 text-gray-400' : 'bg-[#eec200] text-[#3c2f00]'
-                  }`}
-                >
-                  {powerUp2xUsed ? 'FOYDALANILDI' : 'TAYYOR'}
+                <span className="px-2 py-0.5 bg-[#eec200] text-[#3c2f00] rounded font-space text-[10px] uppercase font-bold border border-black">
+                  {powerUp2xUsed ? 'OK' : 'TAYYOR'}
                 </span>
               </button>
 
@@ -557,25 +704,17 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                     : 'bg-[#141a32] hover:bg-[#5de6ff]/10 border-[#5de6ff] active:scale-95'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#5de6ff] text-[#00363e] flex items-center justify-center font-bold text-base shadow border border-black">
-                    🎯
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🎯</span>
                   <div className="flex flex-col text-left">
-                    <span className="font-space text-sm font-bold text-[#5de6ff] leading-tight">
-                      50 / 50
-                    </span>
+                    <span className="font-space text-xs font-bold text-[#5de6ff] leading-tight">50 / 50</span>
                     <span className="text-[10px] text-[#c3c6d7] uppercase font-space">
-                      {powerUp5050Used ? "O'CHIRILDI" : "2 xato o'chiriladi"}
+                      {powerUp5050Used ? "O'CHIRILDI" : "2 ta xato"}
                     </span>
                   </div>
                 </div>
-                <span
-                  className={`px-2 py-0.5 rounded font-space text-[10px] uppercase font-bold border border-black ${
-                    powerUp5050Used ? 'bg-gray-700 text-gray-400' : 'bg-[#5de6ff] text-[#00363e]'
-                  }`}
-                >
-                  {powerUp5050Used ? 'AKTIV' : 'TAYYOR'}
+                <span className="px-2 py-0.5 bg-[#5de6ff] text-[#00363e] rounded font-space text-[10px] uppercase font-bold border border-black">
+                  {powerUp5050Used ? 'OK' : 'TAYYOR'}
                 </span>
               </button>
             </div>
@@ -767,19 +906,27 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
             </div>
           </div>
 
-          {/* Live Confirmation Overlay */}
+          {/* Live Confirmation / Feedback Overlay */}
           {selectedAnswer && (
             <div className="bg-[#222941] rounded-xl p-4 flex items-center justify-between border-2 border-black shadow-[4px_4px_0px_#000000]">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#eec200] text-[#3c2f00] flex items-center justify-center font-space text-xl font-bold border border-black">
-                  ✓
+                <div
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center font-space text-xl font-bold border border-black ${
+                    answerResult === 'correct' ? 'bg-[#eec200] text-[#3c2f00]' : 'bg-[#93000a] text-[#ffdad6]'
+                  }`}
+                >
+                  {answerResult === 'correct' ? '✓' : '✕'}
                 </div>
                 <div className="flex flex-col">
                   <span className="font-space text-base font-bold text-[#dce1ff]">
-                    Javobingiz Qabul Qilindi!
+                    {answerResult === 'correct' ? "Javobingiz To'g'ri! 🎉" : "Noto'g'ri Javob Tanlandi! 😭"}
                   </span>
-                  <span className="text-xs text-[#5de6ff] font-space font-medium">
-                    Tezlik bonusi: +940 ochko hisoblanmoqda ({answerTime}s) ⚡
+                  <span
+                    className={`text-xs font-space font-medium ${
+                      answerResult === 'correct' ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {answerResult === 'correct' ? `+${scoreDelta} ball qo'shildi (${answerTime}s)` : `${scoreDelta} ball jarima belgilandi`}
                   </span>
                 </div>
               </div>
@@ -792,151 +939,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               </button>
             </div>
           )}
-
-          {/* Diagnostic Status Ribbon */}
-          <div className="bg-[#141a32] p-3 rounded-xl flex items-center justify-between text-[#c3c6d7] font-space text-xs font-bold border-2 border-black shadow-[3px_3px_0px_#000000]">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-1 text-[#5de6ff]">
-                <span className="material-symbols-outlined text-[18px]">volume_up</span>
-                <span>Tovush yoqilgan</span>
-              </div>
-              <div className="flex items-center gap-1 text-[#eec200]">
-                <span className="material-symbols-outlined text-[18px]">vibration</span>
-                <span>Haptic active</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[18px] text-[#2563eb]">speed</span>
-              <span className="text-[#dce1ff]">Vaqt: {answerTime ? `${answerTime}s` : '1.18s'}</span>
-            </div>
-          </div>
         </section>
-      </div>
-
-      {/* 3D Tantanali Chempionlar Poydevori */}
-      <div className="mt-8 w-full bg-[#141a32] border-4 border-black rounded-2xl p-6 shadow-[6px_6px_0px_#000000] relative overflow-hidden">
-        <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-96 h-32 bg-[#2563eb]/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 relative z-10">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[#eec200] text-xl">🏆</span>
-              <span className="font-space text-xs font-bold text-[#eec200] uppercase tracking-wider">
-                Grand Finale • Jonli G'oliblar
-              </span>
-            </div>
-            <h3 className="font-space text-2xl font-bold text-[#dce1ff] mt-1">
-              3D Tantanali Chempionlar Poydevori
-            </h3>
-          </div>
-
-          <button
-            type="button"
-            onClick={triggerPodiumConfetti}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-[#181e36] hover:bg-[#222941] rounded-full text-[#5de6ff] font-space text-xs font-bold border-2 border-black shadow-[2px_2px_0px_#000000] active:scale-95 transition-all"
-          >
-            <span className="animate-ping w-2 h-2 rounded-full bg-[#5de6ff]" />
-            <span>Jonli Natijalar Ko'rinishi 🎊</span>
-          </button>
-        </div>
-
-        {/* 3 Step Podium */}
-        <div className="grid grid-cols-3 gap-3 sm:gap-6 items-end pt-8 pb-4 max-w-[850px] mx-auto relative z-10">
-          {/* #2 Silver Rank */}
-          <div className="flex flex-col items-center group">
-            <div className="relative flex flex-col items-center mb-2">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#222941] border-2 border-gray-400 flex items-center justify-center text-3xl shadow-lg relative">
-                🥈 <span className="absolute -top-2 -right-2 text-xl select-none">🐱</span>
-              </div>
-              <span className="font-space text-sm sm:text-base font-bold text-[#dce1ff] mt-1 text-center">
-                Jasur_Dev
-              </span>
-              <span className="font-space text-xs text-[#5de6ff]">8,920 ball</span>
-            </div>
-
-            <div className="w-full h-32 sm:h-40 bg-gradient-to-t from-[#060d24] to-[#2d344c] rounded-t-2xl border-t-4 border-l-2 border-r-2 border-gray-400 flex flex-col items-center justify-center shadow-xl relative overflow-hidden">
-              <span className="font-space text-3xl sm:text-5xl font-bold text-gray-300">#2</span>
-              <span className="font-space text-[10px] text-gray-400 uppercase mt-1 tracking-wider font-bold">
-                Kumush
-              </span>
-            </div>
-          </div>
-
-          {/* #1 Gold Champion */}
-          <div className="flex flex-col items-center group -mt-6 sm:-mt-8">
-            <div className="relative flex flex-col items-center mb-2">
-              <div className="absolute -top-7 text-3xl animate-bounce select-none">👑</div>
-              <div className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl bg-[#2563eb] border-4 border-[#eec200] flex items-center justify-center text-4xl shadow-2xl relative">
-                🤖
-                <span className="absolute -bottom-2 px-2 py-0.5 bg-[#eec200] text-[#3c2f00] text-[9px] font-space font-bold uppercase rounded-full shadow border border-black">
-                  CHEMPION
-                </span>
-              </div>
-              <span className="font-space text-base sm:text-xl font-bold text-[#eec200] mt-2 text-center">
-                Player_01
-              </span>
-              <span className="font-space text-xs sm:text-sm font-bold text-[#dce1ff]">12,450 ball</span>
-              <div className="flex items-center gap-1 text-[11px] text-[#eec200] mt-0.5">
-                <span>🎊</span>
-                <span className="font-semibold">10/10 To'liq</span>
-                <span>🎉</span>
-              </div>
-            </div>
-
-            <div className="w-full h-44 sm:h-56 bg-gradient-to-t from-[#060d24] via-[#cea700]/30 to-[#eec200]/25 rounded-t-2xl border-t-4 border-l-2 border-r-2 border-[#eec200] flex flex-col items-center justify-center shadow-2xl relative overflow-hidden">
-              <span className="font-space text-5xl sm:text-7xl font-bold text-[#eec200] drop-shadow">
-                #1
-              </span>
-              <span className="font-space text-xs text-[#eec200] uppercase mt-1 font-bold tracking-widest">
-                Oltin Toj
-              </span>
-            </div>
-          </div>
-
-          {/* #3 Bronze Rank */}
-          <div className="flex flex-col items-center group">
-            <div className="relative flex flex-col items-center mb-2">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#222941] border-2 border-amber-600 flex items-center justify-center text-3xl shadow-lg relative">
-                🥉 <span className="absolute -top-2 -right-2 text-xl select-none">🥷</span>
-              </div>
-              <span className="font-space text-sm sm:text-base font-bold text-[#dce1ff] mt-1 text-center">
-                Samir_Quiz
-              </span>
-              <span className="font-space text-xs text-[#5de6ff]">7,610 ball</span>
-            </div>
-
-            <div className="w-full h-24 sm:h-32 bg-gradient-to-t from-[#060d24] to-[#181e36] rounded-t-2xl border-t-4 border-l-2 border-r-2 border-amber-600 flex flex-col items-center justify-center shadow-xl relative overflow-hidden">
-              <span className="font-space text-3xl sm:text-5xl font-bold text-amber-500">#3</span>
-              <span className="font-space text-[10px] text-amber-400 uppercase mt-1 tracking-wider font-bold">
-                Bronza
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Arena Real-Time Live Activity Ticker */}
-      <div className="mt-6 w-full bg-[#181e36] rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 border-4 border-black shadow-[4px_4px_0px_#000000]">
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 bg-[#eec200] text-[#3c2f00] font-space text-xs font-bold rounded uppercase border border-black">
-            ARENA XABARI
-          </span>
-          <span className="text-sm text-[#dce1ff]">
-            Leaderboard yangilandi:{' '}
-            <strong className="text-[#5de6ff] font-space">Player_01</strong> 1-o'ringa ko'tarildi!
-          </span>
-        </div>
-
-        <div className="flex items-center gap-6 text-[#c3c6d7] text-xs font-space">
-          <span className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[16px] text-[#5de6ff]">group</span>
-            48 o'yinchi javob berdi
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[16px] text-[#eec200]">military_tech</span>
-            Mukofot jamg'armasi: 500k XP
-          </span>
-        </div>
       </div>
     </div>
   );
