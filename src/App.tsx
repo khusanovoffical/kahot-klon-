@@ -267,16 +267,16 @@ export default function App() {
     }
   };
 
-  // Master Password Unlock
+  // Master Password Unlock (Strictly XUMOYUN2026, never leak in logs or toasts)
   const handleUnlockAdmin = (password: string): boolean => {
-    const validKeys = ['admin777', 'superadmin', 'admin', 'humoyun2026'];
-    if (validKeys.includes(password.trim().toLowerCase())) {
+    const input = password.trim();
+    if (input.toUpperCase() === 'XUMOYUN2026') {
       setIsAdminUnlocked(true);
       showToast("God-Mode muvaffaqiyatli faollashtirildi! Xush kelibsiz, Superadmin 🛡️");
       return true;
     }
     playWrongSound();
-    showToast("Maxfiy kalit noto'g'ri! Kirish rad etildi ❌");
+    showToast("Maxfiy Master Parol noto'g'ri! Kirish rad etildi ❌");
     return false;
   };
 

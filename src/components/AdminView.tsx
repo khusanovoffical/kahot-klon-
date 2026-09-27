@@ -383,7 +383,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
             <div className="flex flex-col gap-1 text-left">
               <label className="font-space text-xs font-bold uppercase text-[#dce1ff] flex items-center justify-between">
                 <span>Master Parol (Secret Key):</span>
-                <span className="text-[11px] text-[#5de6ff]">Standart: admin84f9</span>
+                <span className="text-[11px] text-[#ffdad6] bg-[#93000a] px-2 py-0.5 rounded font-mono font-bold border border-black">
+                  🔒 Himoyalangan
+                </span>
               </label>
 
               <div className="relative">
@@ -394,7 +396,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                     setPasswordInput(e.target.value);
                     setPasswordError(false);
                   }}
-                  placeholder="••••••••••••"
+                  placeholder="Master parolni kiriting..."
                   autoFocus
                   className={`w-full p-3 pl-10 bg-[#060d24] text-[#eec200] font-space text-lg font-bold rounded-xl border-4 ${
                     passwordError ? 'border-[#ffb4ab] animate-shake' : 'border-black'
@@ -406,10 +408,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
               </div>
 
               {passwordError && (
-                <span className="text-xs text-[#ffb4ab] font-space font-bold mt-1 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px]">error</span>
-                  Xato parol! Qayta urinib ko'ring (yoki 'admin84f9' kiriting).
-                </span>
+                <div className="text-xs text-[#ffb4ab] font-space font-bold mt-1.5 flex items-center gap-1.5 bg-[#93000a]/30 p-2 rounded-lg border border-[#ffb4ab]/40 animate-shake">
+                  <span className="material-symbols-outlined text-[16px] text-[#ffb4ab]">error</span>
+                  <span>Xato Master Parol! Kirish rad etildi. Qayta urinib ko'ring.</span>
+                </div>
               )}
             </div>
 
