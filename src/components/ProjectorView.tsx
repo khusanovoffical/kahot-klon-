@@ -18,6 +18,8 @@ interface ProjectorViewProps {
   onNotify: (msg: string) => void;
   roomPin?: string;
   onKickPlayer?: (playerId: string, name: string) => void;
+  activePlayersCount?: number;
+  serverPing?: number;
 }
 
 export const ProjectorView: React.FC<ProjectorViewProps> = ({
@@ -28,18 +30,30 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
   reactions,
   onNotify,
   roomPin = '749 201',
-  onKickPlayer
+  onKickPlayer,
+  activePlayersCount,
+  serverPing = 14
 }) => {
   const currentQ = questions[currentQuestionIndex] || questions[0];
+  const actualOnline = activePlayersCount !== undefined ? activePlayersCount : leaderboard.length;
 
   // Timer state
   const [secondsLeft, setSecondsLeft] = useState(8);
   const [isPaused, setIsPaused] = useState(false);
   const [isMusicOn, setIsMusicOn] = useState(getIsBgmPlaying());
-  const [submissionCount, setSubmissionCount] = useState(38);
+  const [submissionCount, setSubmissionCount] = useState(() => (actualOnline > 0 ? Math.min(actualOnline, 2) : 0));
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [showCenterQrCard, setShowCenterQrCard] = useState(true);
   const totalCircumference = 301.6;
+
+  // Synchronize submission count if online count drops
+  useEffect(() => {
+    if (actualOnline === 0) {
+      setSubmissionCount(0);
+    } else {
+      setSubmissionCount(sc => Math.min(sc, actualOnline));
+    }
+  }, [actualOnline]);
 
   // Countdown timer loop
   useEffect(() => {
@@ -53,14 +67,14 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
         if (prev <= 6) {
           playTickSound(true);
         }
-        // randomly increment submissions towards 42
-        setSubmissionCount(sc => (sc < 42 && Math.random() > 0.4 ? sc + 1 : sc));
+        // increment submissions based on actual online count
+        setSubmissionCount(sc => (sc < actualOnline && Math.random() > 0.4 ? sc + 1 : Math.min(sc, actualOnline)));
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isPaused]);
+  }, [isPaused, actualOnline]);
 
   // Handle Music Toggle
   const handleMusicToggle = () => {
@@ -160,16 +174,27 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
         {/* Center: Live Participant Status Badge */}
         <div className="flex items-center gap-2.5 bg-[#2d344c] px-4 py-1.5 rounded-full border-2 border-black shadow-sm">
           <span className="relative flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#5de6ff] opacity-75" />
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#5de6ff]" />
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${actualOnline > 0 ? 'bg-[#5de6ff]' : 'bg-zinc-500'}`} />
+            <span className={`relative inline-flex rounded-full h-3.5 w-3.5 ${actualOnline > 0 ? 'bg-[#5de6ff]' : 'bg-zinc-500'}`} />
           </span>
           <span className="font-space text-base font-bold text-[#dce1ff] tracking-wide">
-            👥 42 <span className="text-xs text-[#c3c6d7] font-normal">o'yinchi maydonda</span>
+            👥 {actualOnline}{' '}
+            <span className="text-xs text-[#c3c6d7] font-normal">
+              {actualOnline === 0 ? 'online (0 o\'yinchi kutilmoqda)' : 'o\'yinchi maydonda'}
+            </span>
           </span>
         </div>
 
         {/* Right: Stage Master Controls */}
         <div className="flex items-center gap-2">
+          {/* Real Ping badge */}
+          <div
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#141a32] text-[#5de6ff] rounded-lg border-2 border-black font-space text-xs font-bold shadow-sm"
+            title="Haqiqiy server kechikishi"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>PING: {serverPing}ms</span>
+          </div>
           {!showCenterQrCard && (
             <button
               type="button"
@@ -310,7 +335,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
           <span className="font-space text-base font-bold text-[#dce1ff]">
             {submissionCount}
           </span>
-          <span className="text-xs text-[#c3c6d7]">/ 42 javob berildi</span>
+          <span className="text-xs text-[#c3c6d7]">/ {actualOnline} javob berildi</span>
         </div>
       </div>
 
@@ -556,86 +581,98 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
         </div>
 
         {/* Five Column Bento Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {leaderboard.map(player => (
-            <div
-              key={player.id}
-              className={`group flex flex-col p-3 rounded-lg relative overflow-hidden border-2 border-black shadow-[3px_3px_0px_#000000] transition-all hover:border-[#ffb4ab] ${
-                player.rank === 1
-                  ? 'bg-[#222941] ring-2 ring-[#eec200]'
-                  : player.rank === 2
-                  ? 'bg-[#222941] ring-2 ring-[#5de6ff]'
-                  : 'bg-[#181e36]'
-              }`}
-            >
-              {/* Rank label */}
+        {leaderboard.length === 0 ? (
+          <div className="p-8 text-center bg-[#060d24] rounded-xl border-2 border-black text-[#c3c6d7]">
+            <span className="text-4xl block mb-2">🎯</span>
+            <h4 className="font-space font-bold text-base text-[#dce1ff]">
+              Hozircha xonada o'yinchilar yo'q (0 online)
+            </h4>
+            <p className="text-xs text-[#c3c6d7] mt-1 font-space max-w-md mx-auto">
+              Smartfoningiz orqali PIN: <strong className="text-[#eec200]">{roomPin}</strong> ni kiriting yoki QR-kodni skanerlang.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {leaderboard.map(player => (
               <div
-                className={`absolute top-0 right-0 px-2 py-0.5 rounded-bl font-space text-[10px] font-bold border-l-2 border-b-2 border-black ${
+                key={player.id}
+                className={`group flex flex-col p-3 rounded-lg relative overflow-hidden border-2 border-black shadow-[3px_3px_0px_#000000] transition-all hover:border-[#ffb4ab] ${
                   player.rank === 1
-                    ? 'bg-[#eec200] text-[#3c2f00]'
+                    ? 'bg-[#222941] ring-2 ring-[#eec200]'
                     : player.rank === 2
-                    ? 'bg-[#2d344c] text-white'
-                    : 'bg-[#00cbe6] text-[#00363e]'
+                    ? 'bg-[#222941] ring-2 ring-[#5de6ff]'
+                    : 'bg-[#181e36]'
                 }`}
               >
-                #{player.rank}
-              </div>
-
-              {/* Hover Quick Kick Action */}
-              {onKickPlayer && (
-                <button
-                  type="button"
-                  onClick={() => onKickPlayer(player.id, player.name)}
-                  className="absolute top-1 right-7 opacity-0 group-hover:opacity-100 bg-[#93000a] hover:bg-[#ffb4ab] text-white hover:text-black px-1.5 py-0.5 rounded text-[9px] font-space font-bold uppercase transition-all z-20 flex items-center gap-0.5 border border-black shadow"
-                  title="Lobbiyadan chiqarish (Kick)"
+                {/* Rank label */}
+                <div
+                  className={`absolute top-0 right-0 px-2 py-0.5 rounded-bl font-space text-[10px] font-bold border-l-2 border-b-2 border-black ${
+                    player.rank === 1
+                      ? 'bg-[#eec200] text-[#3c2f00]'
+                      : player.rank === 2
+                      ? 'bg-[#2d344c] text-white'
+                      : 'bg-[#00cbe6] text-[#00363e]'
+                  }`}
                 >
-                  <span className="material-symbols-outlined text-[10px]">block</span> Kick
-                </button>
-              )}
-
-              {/* Avatar & details */}
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-10 h-10 rounded bg-[#060d24] overflow-hidden shrink-0 border-2 border-black flex items-center justify-center text-lg">
-                  {player.avatar ? (
-                    <img
-                      src={player.avatar}
-                      alt={player.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="font-space font-bold text-xs text-[#5de6ff]">
-                      {player.avatarEmoji || player.name.slice(0, 2).toUpperCase()}
-                    </span>
-                  )}
+                  #{player.rank}
                 </div>
 
-                <div className="flex flex-col min-w-0">
-                  <span className="font-space text-xs font-bold text-[#dce1ff] truncate">
-                    {player.name}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-[#eec200] font-space font-bold">
-                      🔥 {player.streak}x STREAK
+                {/* Hover Quick Kick Action */}
+                {onKickPlayer && (
+                  <button
+                    type="button"
+                    onClick={() => onKickPlayer(player.id, player.name)}
+                    className="absolute top-1 right-7 opacity-0 group-hover:opacity-100 bg-[#93000a] hover:bg-[#ffb4ab] text-white hover:text-black px-1.5 py-0.5 rounded text-[9px] font-space font-bold uppercase transition-all z-20 flex items-center gap-0.5 border border-black shadow"
+                    title="Lobbiyadan chiqarish (Kick)"
+                  >
+                    <span className="material-symbols-outlined text-[10px]">block</span> Kick
+                  </button>
+                )}
+
+                {/* Avatar & details */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-10 h-10 rounded bg-[#060d24] overflow-hidden shrink-0 border-2 border-black flex items-center justify-center text-lg">
+                    {player.avatar ? (
+                      <img
+                        src={player.avatar}
+                        alt={player.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="font-space font-bold text-xs text-[#5de6ff]">
+                        {player.avatarEmoji || player.name.slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-space text-xs font-bold text-[#dce1ff] truncate">
+                      {player.name}
                     </span>
-                    <span className="text-[9px] bg-[#eec200]/20 text-[#eec200] px-1 rounded font-bold">
-                      +{player.recentGain}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-[#eec200] font-space font-bold">
+                        🔥 {player.streak}x STREAK
+                      </span>
+                      <span className="text-[9px] bg-[#eec200]/20 text-[#eec200] px-1 rounded font-bold">
+                        +{player.recentGain}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Score footer */}
-              <div className="mt-auto flex items-baseline justify-between pt-1 border-t border-black/40">
-                <span className="font-space text-lg font-bold text-[#dce1ff] leading-none">
-                  {player.score.toLocaleString()}
-                </span>
-                <span className="text-xs text-[#5de6ff] font-space font-bold">
-                  +{player.recentGain}
-                </span>
+                {/* Score footer */}
+                <div className="mt-auto flex items-baseline justify-between pt-1 border-t border-black/40">
+                  <span className="font-space text-lg font-bold text-[#dce1ff] leading-none">
+                    {player.score.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-[#5de6ff] font-space font-bold">
+                    +{player.recentGain}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Fullscreen Theater QR Modal */}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { CHARACTER_AVATARS, CharacterAvatar, getAvatarFallbackUrl } from '../data/avatarsData';
-import { Question } from '../types/quiz';
+import { Question, ActivePlayer } from '../types/quiz';
 import {
   playClickSound,
   playCorrectSound,
@@ -17,6 +17,11 @@ interface PlayerViewProps {
   roomPin: string;
   activeQuestion?: Question;
   onPlayerProfileUpdate?: (name: string, avatarUrl: string) => void;
+  onPlayerJoinRoom?: (player: ActivePlayer) => void;
+  onPlayerLeaveRoom?: (playerId: string) => void;
+  activePlayersCount?: number;
+  serverPing?: number;
+  forceLobbyTrigger?: number;
 }
 
 export const PlayerView: React.FC<PlayerViewProps> = ({
@@ -24,10 +29,26 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
   onNotify,
   roomPin,
   activeQuestion,
-  onPlayerProfileUpdate
+  onPlayerProfileUpdate,
+  onPlayerJoinRoom,
+  onPlayerLeaveRoom,
+  activePlayersCount = 0,
+  serverPing = 14,
+  forceLobbyTrigger = 0
 }) => {
   // Mode switcher: 'lobby' (PIN & Ro'yxat) vs 'ingame' (O'yinchi Pulti Jonli)
   const [subView, setSubView] = useState<'lobby' | 'ingame'>('lobby');
+  const [localPlayerId, setLocalPlayerId] = useState<string>('player-local-me');
+
+  // Triggered by footer button "O'yinchi (PIN terish)"
+  useEffect(() => {
+    if (forceLobbyTrigger > 0) {
+      setSubView('lobby');
+      setTimeout(() => {
+        pinInputRefs.current[0]?.focus();
+      }, 100);
+    }
+  }, [forceLobbyTrigger]);
 
   // PIN inputs
   const cleanRoomPin = roomPin.replace(/\s+/g, '');
@@ -120,7 +141,9 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
       return;
     }
 
-    // Success
+    // Success: register live player to the room
+    const pId = 'player-' + Date.now();
+    setLocalPlayerId(pId);
     setPinError(null);
     playPowerUpSound();
     confetti({
@@ -128,8 +151,32 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
       spread: 70,
       origin: { y: 0.6 }
     });
+
+    if (onPlayerJoinRoom) {
+      onPlayerJoinRoom({
+        id: pId,
+        name: nickname.trim() || 'CyberSardor',
+        avatar: currentAvatar.imageUrl,
+        avatarEmoji: currentAvatar.fallbackIcon || '🎮',
+        score: score,
+        streak: streak,
+        ping: serverPing,
+        joinedAt: Date.now()
+      });
+    }
+
     setSubView('ingame');
-    onNotify(`Arenaga xush kelibsiz, ${nickname}! O'yin pulti faollashtirildi 🚀`);
+    onNotify(`Arenaga xush kelibsiz, ${nickname}! O'yin pulti faollashtirildi (+1 online) 🚀`);
+  };
+
+  // Leave Game handler: immediately disconnects and decrements counter by -1
+  const handleLeaveGame = () => {
+    playClickSound();
+    if (onPlayerLeaveRoom) {
+      onPlayerLeaveRoom(localPlayerId);
+    }
+    setSubView('lobby');
+    onNotify("Xonadan chiqdingiz (-1 online). Qayta ulanish uchun PIN kiriting.");
   };
 
   // Select Random Avatar
@@ -230,15 +277,15 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
     <div className="flex flex-col w-full pb-10">
       {/* Dynamic Arena Broadcast Status Bar */}
       <div className="w-full flex flex-col md:flex-row items-center justify-between gap-4 py-2.5 mb-6 bg-[#141a32] rounded-xl px-4 border-2 border-black shadow-[4px_4px_0px_#000000]">
-        <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full bg-[#5de6ff] animate-ping" />
-          <span className="font-space text-xs font-bold text-[#5de6ff] uppercase tracking-widest">
-            Jonli Sinxronizatsiya: Aktiv
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <span className={`w-3 h-3 rounded-full ${activePlayersCount > 0 ? 'bg-[#5de6ff] animate-ping' : 'bg-zinc-500'}`} />
+          <span className="font-space text-xs font-bold uppercase tracking-widest text-[#5de6ff]">
+            {activePlayersCount > 0 ? `${activePlayersCount} NAZORATDA (${activePlayersCount} ONLINE)` : 'XONA BO\'SH (0 ONLINE)'}
           </span>
           <span className="hidden sm:inline text-[#c3c6d7] text-xs">|</span>
           <span className="text-xs text-[#c3c6d7] flex items-center gap-1">
             <span className="material-symbols-outlined text-[16px] text-[#eec200]">bolt</span>
-            Server kechikishi: <strong className="text-[#eec200] font-space">18ms</strong>
+            Haqiqiy kechikish (Ping): <strong className="text-[#eec200] font-mono font-bold">{serverPing}ms</strong>
           </span>
         </div>
 
@@ -520,7 +567,7 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
               </div>
 
               {/* Dynamic Mood & Streak Indicator */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {playerMood === 'win' && (
                   <span className="px-2 py-0.5 bg-[#eec200] text-[#3c2f00] font-space text-xs font-bold rounded-lg border border-black flex items-center gap-1 animate-bounce">
                     <span>🔥👑⚡️</span>
@@ -536,7 +583,25 @@ export const PlayerView: React.FC<PlayerViewProps> = ({
                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#060d24] rounded-lg text-[#5de6ff] font-space text-xs font-bold border border-black">
                   <span className="w-2 h-2 rounded-full bg-[#5de6ff] animate-pulse" />
                   <span>#{cleanRoomPin}</span>
+                  <span className="text-[#c3c6d7] hidden sm:inline">· {activePlayersCount} online</span>
                 </div>
+
+                {/* Real-time Ping */}
+                <div className="hidden md:flex items-center gap-1 px-2 py-1 bg-[#060d24] rounded-lg text-[#eec200] font-mono text-xs font-bold border border-black" title="Server kechikishi">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{serverPing}ms</span>
+                </div>
+
+                {/* Leave Game button (-1 online) */}
+                <button
+                  type="button"
+                  onClick={handleLeaveGame}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-[#93000a] hover:bg-[#ffb4ab] hover:text-[#690005] text-[#ffdad6] rounded-lg border-2 border-black text-xs font-space font-bold transition-all shadow-[2px_2px_0px_#000000] active:translate-y-0.5"
+                  title="Xonadan chiqish (O'yindan uzilish)"
+                >
+                  <span className="material-symbols-outlined text-[15px]">logout</span>
+                  <span className="hidden sm:inline">Chiqish</span>
+                </button>
               </div>
             </div>
 

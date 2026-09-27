@@ -6,6 +6,7 @@ interface HeaderProps {
   currentScreen: ScreenMode;
   onScreenChange: (screen: ScreenMode) => void;
   onlinePlayersCount?: number;
+  serverPing?: number;
   playerNickname?: string;
   playerAvatarUrl?: string;
   isAdminUnlocked?: boolean;
@@ -15,7 +16,8 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentScreen,
   onScreenChange,
-  onlinePlayersCount = 1280,
+  onlinePlayersCount = 0,
+  serverPing = 14,
   playerNickname = 'Player_01',
   playerAvatarUrl,
   isAdminUnlocked,
@@ -53,11 +55,35 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#181e36] rounded-lg border-2 border-black shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#5de6ff] animate-pulse" />
-            <span className="font-space text-xs font-bold text-[#5de6ff] uppercase tracking-wider">
-              {onlinePlayersCount.toLocaleString()} jonli o'yinchilar
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#181e36] rounded-lg border-2 border-black shadow-sm">
+              <span className={`w-2.5 h-2.5 rounded-full ${onlinePlayersCount > 0 ? 'bg-[#5de6ff] animate-pulse' : 'bg-zinc-500'}`} />
+              <span className="font-space text-xs font-bold uppercase tracking-wider">
+                {onlinePlayersCount > 0 ? (
+                  <span className="text-[#5de6ff]">
+                    {onlinePlayersCount} JONLI O'YINCHI{onlinePlayersCount > 1 ? 'LAR' : ''}
+                  </span>
+                ) : (
+                  <span className="text-[#c3c6d7]">0 ONLINE</span>
+                )}
+              </span>
+            </div>
+
+            <div
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-[#0e1428] rounded-lg border-2 border-black text-xs font-mono font-bold text-[#5de6ff] shadow-sm"
+              title="Haqiqiy server kechikishi (RTT latency)"
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  serverPing < 50
+                    ? 'bg-emerald-400'
+                    : serverPing < 120
+                    ? 'bg-yellow-400'
+                    : 'bg-red-400'
+                } animate-pulse`}
+              />
+              <span>{serverPing}ms</span>
+            </div>
           </div>
         </div>
 

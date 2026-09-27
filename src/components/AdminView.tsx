@@ -25,7 +25,11 @@ interface AdminViewProps {
   isUnlocked: boolean;
   onUnlock: (password: string) => boolean;
   onLock: () => void;
-  playersCount?: number;
+  activePlayersCount?: number;
+  serverPing?: number;
+  totalPlayedGames?: number;
+  onAddTestPlayer?: () => void;
+  onClearAllPlayers?: () => void;
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({
@@ -46,7 +50,11 @@ export const AdminView: React.FC<AdminViewProps> = ({
   isUnlocked,
   onUnlock,
   onLock,
-  playersCount = 42
+  activePlayersCount = 0,
+  serverPing = 14,
+  totalPlayedGames,
+  onAddTestPlayer,
+  onClearAllPlayers
 }) => {
   // Password State
   const [passwordInput, setPasswordInput] = useState('');
@@ -430,6 +438,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
     return true;
   });
 
+  const totalAllCatalogQuestions = quizCatalog.reduce((sum, q) => sum + (q.questionCount || 0), 0);
+  const calculatedPlayedGames = totalPlayedGames ?? quizCatalog.reduce((sum, q) => sum + (q.timesPlayed || 0), 0);
+
   return (
     <div className="w-full flex flex-col pb-12">
       {/* Top Section: Superadmin HUD Header */}
@@ -446,9 +457,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
               <span>Master Key Faol: <span className="tracking-widest">••••••••84f9</span></span>
             </div>
 
-            <div className="flex items-center gap-2 px-3 py-1 bg-[#141a32] text-[#c3c6d7] font-space text-xs font-bold rounded-lg border border-black">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#5de6ff] animate-ping" />
-              <span>SERVER: 14ms • {playersCount} O'yinchi</span>
+            <div className="flex items-center gap-2 px-3 py-1 bg-[#141a32] text-[#c3c6d7] font-space text-xs font-bold rounded-lg border border-black shadow-inner">
+              <span className={`w-2.5 h-2.5 rounded-full ${activePlayersCount > 0 ? 'bg-[#5de6ff] animate-ping' : 'bg-zinc-500'}`} />
+              <span>SERVER: <strong className="text-emerald-400 font-mono">{serverPing}ms</strong> • <strong className="text-[#5de6ff]">{activePlayersCount} O'yinchi</strong> {activePlayersCount === 0 && <span className="text-[#c3c6d7] font-normal">(0 online)</span>}</span>
             </div>
           </div>
 
@@ -463,7 +474,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
               title="Jonli Lobbini Boshqarish (Kick / Ban)"
             >
               <span className="material-symbols-outlined text-[18px]">person_remove</span>
-              <span>Kick / Ban Nazorati</span>
+              <span>Kick / Ban Nazorati ({activePlayersCount})</span>
             </button>
 
             <button
@@ -487,6 +498,101 @@ export const AdminView: React.FC<AdminViewProps> = ({
               <span className="material-symbols-outlined text-[16px]">lock</span>
               <span>Qulflash</span>
             </button>
+          </div>
+        </div>
+
+        {/* Dynamic Real-time Quiz Statistics HUD (Requirement 3: Jonli Viktorina Statistikasi) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {/* Card 1: Jami Testlar */}
+          <div className="p-3.5 bg-[#141a32] border-2 border-black rounded-xl shadow-[3px_3px_0px_#000000] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-[#c3c6d7] font-space font-bold uppercase">
+              <span>Jami Testlar</span>
+              <span className="material-symbols-outlined text-[#5de6ff] text-[18px]">library_books</span>
+            </div>
+            <div className="my-1.5">
+              <span className="text-2xl sm:text-3xl font-black font-space text-[#5de6ff]">
+                {quizCatalog.length}
+              </span>
+              <span className="text-xs text-[#c3c6d7] font-space ml-1">to'plam</span>
+            </div>
+            <span className="text-[11px] text-emerald-400 font-space flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              {quizCatalog.filter(q => q.status === 'active').length} faol katalogda
+            </span>
+          </div>
+
+          {/* Card 2: Mavjud Savollar */}
+          <div className="p-3.5 bg-[#141a32] border-2 border-black rounded-xl shadow-[3px_3px_0px_#000000] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-[#c3c6d7] font-space font-bold uppercase">
+              <span>Mavjud Savollar</span>
+              <span className="material-symbols-outlined text-[#eec200] text-[18px]">help_center</span>
+            </div>
+            <div className="my-1.5">
+              <span className="text-2xl sm:text-3xl font-black font-space text-[#eec200]">
+                {questions.length}
+              </span>
+              <span className="text-xs text-[#c3c6d7] font-space ml-1">faol</span>
+            </div>
+            <span className="text-[11px] text-[#c3c6d7] font-space">
+              Jami {totalAllCatalogQuestions} ta bazada
+            </span>
+          </div>
+
+          {/* Card 3: O'tkazilgan O'yinlar */}
+          <div className="p-3.5 bg-[#141a32] border-2 border-black rounded-xl shadow-[3px_3px_0px_#000000] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-[#c3c6d7] font-space font-bold uppercase">
+              <span>O'tkazilgan O'yinlar</span>
+              <span className="material-symbols-outlined text-purple-400 text-[18px]">sports_esports</span>
+            </div>
+            <div className="my-1.5">
+              <span className="text-2xl sm:text-3xl font-black font-space text-purple-300">
+                {calculatedPlayedGames}
+              </span>
+              <span className="text-xs text-[#c3c6d7] font-space ml-1">marta</span>
+            </div>
+            <span className="text-[11px] text-[#c3c6d7] font-space">
+              Haqiqiy sessiyalar hisobi
+            </span>
+          </div>
+
+          {/* Card 4: Jonli Ulangan O'yinchilar */}
+          <div className="p-3.5 bg-[#141a32] border-2 border-black rounded-xl shadow-[3px_3px_0px_#000000] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs text-[#c3c6d7] font-space font-bold uppercase">
+              <span>Jonli O'yinchilar</span>
+              <span className="material-symbols-outlined text-[#5de6ff] text-[18px]">group</span>
+            </div>
+            <div className="my-1.5">
+              <span className="text-2xl sm:text-3xl font-black font-space text-white">
+                {activePlayersCount}
+              </span>
+              <span className="text-xs font-space ml-1 text-[#5de6ff]">
+                {activePlayersCount === 0 ? 'online' : 'nafar'}
+              </span>
+            </div>
+            <span className="text-[11px] font-space flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${activePlayersCount > 0 ? 'bg-[#5de6ff] animate-pulse' : 'bg-zinc-500'}`} />
+              <span className={activePlayersCount > 0 ? 'text-[#5de6ff]' : 'text-[#c3c6d7]'}>
+                {activePlayersCount > 0 ? 'Maydonda faol' : 'Qat\'iy 0 online'}
+              </span>
+            </span>
+          </div>
+
+          {/* Card 5: Real Server Ping */}
+          <div className="p-3.5 bg-[#141a32] border-2 border-black rounded-xl shadow-[3px_3px_0px_#000000] flex flex-col justify-between col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between text-xs text-[#c3c6d7] font-space font-bold uppercase">
+              <span>Server Kechikishi</span>
+              <span className="material-symbols-outlined text-emerald-400 text-[18px]">speed</span>
+            </div>
+            <div className="my-1.5">
+              <span className="text-2xl sm:text-3xl font-black font-mono text-emerald-400">
+                {serverPing}
+              </span>
+              <span className="text-xs text-[#c3c6d7] font-mono ml-1">ms (RTT)</span>
+            </div>
+            <span className="text-[11px] font-space text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Dinamik o'lchov faol
+            </span>
           </div>
         </div>
 
@@ -521,12 +627,36 @@ export const AdminView: React.FC<AdminViewProps> = ({
               <span className="material-symbols-outlined text-[16px]">casino</span>
               <span>Yangi PIN Generatsiya 🎲</span>
             </button>
+
+            {/* Quick Test simulator buttons for online counter testing (+1 / 0) */}
+            {onAddTestPlayer && (
+              <button
+                type="button"
+                onClick={onAddTestPlayer}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-[#181e36] hover:bg-[#222941] text-[#5de6ff] font-space text-xs font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] transition-colors"
+                title="Jonli hisoblagichni tekshirish uchun o'yinchi qo'shish (+1 online)"
+              >
+                <span className="material-symbols-outlined text-[16px]">person_add</span>
+                <span>+1 O'yinchi</span>
+              </button>
+            )}
+
+            {onClearAllPlayers && (
+              <button
+                type="button"
+                onClick={onClearAllPlayers}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-[#181e36] hover:bg-[#93000a] text-[#ffdad6] font-space text-xs font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] transition-colors"
+                title="Barcha o'yinchilarni chiqarib 0 online holatiga qaytarish"
+              >
+                <span>🧹 0 Online Qilish</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-xs font-space text-[#c3c6d7]">
             <span className="flex items-center gap-1 bg-[#181e36] px-3 py-1.5 rounded-lg border border-black">
-              <span className="w-2 h-2 rounded-full bg-[#5de6ff] animate-ping" />
-              <span>O'yinchilar: <strong className="text-[#5de6ff]">{playersCount} ta</strong></span>
+              <span className={`w-2 h-2 rounded-full ${activePlayersCount > 0 ? 'bg-[#5de6ff] animate-ping' : 'bg-zinc-500'}`} />
+              <span>O'yinchilar: <strong className="text-[#5de6ff]">{activePlayersCount} ta</strong> {activePlayersCount === 0 && <span className="text-[#c3c6d7]">(0 online)</span>}</span>
             </span>
             <span className="flex items-center gap-1 bg-[#181e36] px-3 py-1.5 rounded-lg border border-black">
               <span>Savollar: <strong className="text-[#eec200]">{questions.length} ta</strong></span>

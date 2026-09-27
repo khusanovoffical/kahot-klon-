@@ -1,50 +1,42 @@
 import React from 'react';
+import { ActivePlayer } from '../types/quiz';
 import { playClickSound, playWrongSound } from '../utils/sound';
-
-interface LobbyUser {
-  id: string;
-  name: string;
-  score: number;
-  ping: number;
-  flag: string;
-}
 
 interface LobbyKickModalProps {
   isOpen: boolean;
   onClose: () => void;
   onNotify: (msg: string) => void;
+  activePlayers: ActivePlayer[];
+  onKickPlayer: (id: string, name: string) => void;
+  onAddTestPlayer?: () => void;
 }
 
 export const LobbyKickModal: React.FC<LobbyKickModalProps> = ({
   isOpen,
   onClose,
-  onNotify
+  onNotify,
+  activePlayers,
+  onKickPlayer,
+  onAddTestPlayer
 }) => {
-  const [users, setUsers] = React.useState<LobbyUser[]>([
-    { id: 'u-1', name: 'Shohrux_Frontend', score: 2450, ping: 22, flag: 'normal' },
-    { id: 'u-2', name: 'SpamBot_99x', score: 0, ping: 198, flag: 'suspicious' },
-    { id: 'u-3', name: 'Nodira_Samarkand', score: 1890, ping: 35, flag: 'normal' },
-    { id: 'u-4', name: 'TrollUser_007', score: 120, ping: 240, flag: 'suspicious' },
-    { id: 'u-5', name: 'Bek_Tashkent', score: 1200, ping: 28, flag: 'normal' }
-  ]);
-
   if (!isOpen) return null;
 
-  const handleKick = (user: LobbyUser) => {
+  const handleKick = (player: ActivePlayer) => {
     playWrongSound();
-    setUsers(prev => prev.filter(u => u.id !== user.id));
-    onNotify(`${user.name} o'yindan chetlatildi (Kick) 🚫`);
+    onKickPlayer(player.id, player.name);
+    onNotify(`${player.name} o'yindan chiqarildi (KICK) 🚫`);
   };
 
-  const handleBan = (user: LobbyUser) => {
+  const handleBan = (player: ActivePlayer) => {
     playWrongSound();
-    setUsers(prev => prev.filter(u => u.id !== user.id));
-    onNotify(`${user.name} qora ro'yxatga kiritildi (Ban) 🚫`);
+    onKickPlayer(player.id, player.name);
+    onNotify(`${player.name} qora ro'yxatga kiritildi (BAN) ⛔`);
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-[620px] bg-[#181e36] border-4 border-black shadow-[6px_6px_0px_#000000] rounded-xl p-5 flex flex-col gap-4">
+        {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b-2 border-black">
           <div className="flex items-center gap-2">
             <span className="w-8 h-8 rounded bg-[#93000a] text-[#ffdad6] flex items-center justify-center border-2 border-black font-bold">
@@ -66,44 +58,63 @@ export const LobbyKickModal: React.FC<LobbyKickModalProps> = ({
           </button>
         </div>
 
-        <p className="text-xs sm:text-sm text-[#c3c6d7]">
-          Qoidabuzar yoki nojo'ya taxallusli o'yinchilarni xonadan chetlatish (Kick / Ban). Real vaqtda amalga oshiriladi:
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs sm:text-sm text-[#c3c6d7]">
+            Faqat xonaga PIN orqali haqiqatda ulangan jonli o'yinchilar ro'yxati:
+          </p>
+          {onAddTestPlayer && (
+            <button
+              type="button"
+              onClick={onAddTestPlayer}
+              className="px-2.5 py-1 bg-[#eec200] hover:bg-[#ffe083] text-[#3c2f00] text-xs font-space font-bold rounded-lg border-2 border-black shadow-[2px_2px_0px_#000000] shrink-0"
+              title="Jonli hisoblagichni sinash uchun o'yinchi qo'shish (+1)"
+            >
+              +1 Test O'yinchi
+            </button>
+          )}
+        </div>
 
+        {/* Players List */}
         <div className="flex flex-col gap-2 max-h-[320px] overflow-y-auto pr-1">
-          {users.map(user => (
+          {activePlayers.map(player => (
             <div
-              key={user.id}
+              key={player.id}
               className="p-3 bg-[#141a32] rounded-lg border-2 border-black flex items-center justify-between group hover:border-[#ffb4ab] transition-colors"
             >
-              <div className="flex items-center gap-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${user.flag === 'suspicious' ? 'bg-[#ffb4ab]' : 'bg-[#5de6ff]'} animate-pulse`} />
-                <span className="font-space text-sm font-bold text-[#dce1ff]">{user.name}</span>
-                <span className="text-xs text-[#c3c6d7]">· {user.score.toLocaleString()} ball</span>
-                {user.flag === 'suspicious' ? (
-                  <span className="px-1.5 py-0.5 bg-[#93000a] text-[#ffdad6] text-[10px] font-space font-bold rounded">
-                    SHUBHALI
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded bg-[#222941] border border-black overflow-hidden shrink-0 flex items-center justify-center text-sm">
+                  {player.avatar ? (
+                    <img src={player.avatar} alt={player.name} className="w-full h-full object-cover" />
+                  ) : (
+                    player.avatarEmoji || '👤'
+                  )}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#5de6ff] animate-pulse" />
+                    <span className="font-space text-sm font-bold text-[#dce1ff] truncate">
+                      {player.name}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#c3c6d7] font-space">
+                    {player.score.toLocaleString()} ball • Ping: {player.ping || 16}ms
                   </span>
-                ) : (
-                  <span className="px-1.5 py-0.5 bg-[#2d344c] text-[#5de6ff] text-[10px] font-space rounded">
-                    PING {user.ping}ms
-                  </span>
-                )}
+                </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
-                  onClick={() => handleKick(user)}
+                  onClick={() => handleKick(player)}
                   className="px-2.5 py-1 bg-[#93000a] text-[#ffdad6] hover:bg-[#ffb4ab] hover:text-[#690005] font-space font-bold text-xs rounded border-2 border-black shadow-[2px_2px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5"
-                  title="O'yindan chiqarish"
+                  title="O'yindan chiqarish (-1)"
                   type="button"
                 >
                   Kick 🚫
                 </button>
                 <button
-                  onClick={() => handleBan(user)}
+                  onClick={() => handleBan(player)}
                   className="px-2.5 py-1 bg-black text-[#eec200] hover:bg-[#eec200] hover:text-black font-space font-bold text-xs rounded border-2 border-black shadow-[2px_2px_0px_#000000] active:translate-x-0.5 active:translate-y-0.5"
-                  title="Qora ro'yxatga olish"
+                  title="Qora ro'yxatga olish (-1)"
                   type="button"
                 >
                   Ban ⛔
@@ -112,16 +123,23 @@ export const LobbyKickModal: React.FC<LobbyKickModalProps> = ({
             </div>
           ))}
 
-          {users.length === 0 && (
-            <div className="p-6 text-center text-[#c3c6d7] bg-[#141a32] rounded border border-black">
-              Lobbida o'yinchilar qolmadi yoki barchasi tasdiqlangan.
+          {activePlayers.length === 0 && (
+            <div className="p-8 text-center text-[#c3c6d7] bg-[#141a32] rounded-lg border-2 border-black">
+              <span className="text-3xl block mb-2">👥</span>
+              <p className="font-space font-bold text-sm text-[#dce1ff]">
+                Hozirda xonada faol o'yinchilar yo'q (0 online)
+              </p>
+              <p className="text-xs text-[#c3c6d7] mt-1 font-space">
+                Ishtirokchilar PIN orqali maydonga ulanganda bu yerda real vaqtda paydo bo'ladi.
+              </p>
             </div>
           )}
         </div>
 
+        {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t-2 border-black">
           <span className="font-space text-xs text-[#c3c6d7]">
-            Jami faol nazoratda: <strong className="text-[#5de6ff]">{users.length} o'yinchi</strong>
+            Jonli o'yinchilar: <strong className="text-[#5de6ff]">{activePlayers.length} nafar</strong>
           </span>
           <button
             onClick={() => {

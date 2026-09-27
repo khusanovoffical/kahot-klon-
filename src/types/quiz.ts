@@ -33,6 +33,18 @@ export interface Question {
   };
 }
 
+export interface ActivePlayer {
+  id: string;
+  name: string;
+  avatar: string;
+  avatarEmoji?: string;
+  score: number;
+  streak: number;
+  ping: number;
+  joinedAt: number;
+  isHost?: boolean;
+}
+
 export interface LeaderboardPlayer {
   id: string;
   name: string;
